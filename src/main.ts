@@ -9,14 +9,12 @@ const client = new Client({
 
 client.once("clientReady", async () => {
   //Add commands for servers bot is already in
-  for (const [id, guild] of client.guilds.cache) {
-    await deployCommands({guildId: guild.id});
-  }
+  await deployCommands();
   console.log("Discord bot is ready! 🤖");
 });
 
 client.on("guildCreate", async (guild) => {
-  await deployCommands({ guildId: guild.id });
+  await deployCommands();
 });
 
 client.on("interactionCreate", async (interaction) => {
