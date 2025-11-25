@@ -1,12 +1,29 @@
 import { Client } from "discord.js";
-import { config } from "./config.js";
+import { config } from "./init";
+import { deployCommands, executeCommand } from "./commands/deploy";
 
+// Giving bot permissions
 const client = new Client({
-  intents: ["Guilds", "GuildMessages", "DirectMessages"],
+  intents: ["Guilds", "GuildMessages", "DirectMessages", "GuildMembers", "GuildWebhooks","GuildPresences"],
 });
 
-client.once("ready", () => {
+client.once("clientReady", async () => {
+  //Add commands for servers bot is already in
+  for (const [id, guild] of client.guilds.cache) {
+    await deployCommands({guildId: guild.id});
+  }
   console.log("Discord bot is ready! 🤖");
+});
+
+client.on("guildCreate", async (guild) => {
+  await deployCommands({ guildId: guild.id });
+});
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isCommand()) {
+    return;
+  }
+  executeCommand(interaction);
 });
 
 client.login(config.DISCORD_TOKEN);
