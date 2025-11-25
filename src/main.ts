@@ -1,6 +1,6 @@
 import { Client } from "discord.js";
 import { env } from "./init";
-import { deployCommands, executeCommand } from "./commands/deploy";
+import { clearGlobalCommands, deployCommands, executeCommand, getCommands } from "./deploy-commands";
 
 // Giving bot permissions
 const client = new Client({
@@ -9,9 +9,9 @@ const client = new Client({
 
 client.once("clientReady", async () => {
   //Add commands for servers bot is already in
-  for (const [id, guild] of client.guilds.cache) {
-    await deployCommands({guildId: guild.id});
-  }
+  //for (const [id, guild] of client.guilds.cache) {
+  //  await deployCommands({guildId: guild.id});
+  //}
   console.log("Discord bot is ready! 🤖");
 });
 

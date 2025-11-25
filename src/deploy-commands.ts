@@ -1,6 +1,6 @@
 import { REST, Routes } from "discord.js";
-import { env } from "../init";
-import { commands } from "./index";
+import { env } from "./init";
+import { commands } from "./commands/index";
 
 const commandsData = Object.values(commands).map((command) => command.data);
 
@@ -22,6 +22,35 @@ export async function deployCommands({ guildId }: DeployCommandsProps) {
     );
 
     console.log("Successfully reloaded application (/) commands.");
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+export async function getCommands() {
+  try {
+    console.log("Fetching commands");
+
+    const globalCommands = await rest.get(
+      Routes.applicationCommands(env.DISCORD_CLIENT_ID)
+    );
+    console.log(globalCommands);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+export async function clearGlobalCommands() {
+  try {
+    console.log("Clearing global commands...");
+
+    const globalCommands = await rest.put(
+      Routes.applicationCommands(env.DISCORD_CLIENT_ID),
+      {
+        body: []
+      }
+    );
+    console.log("Successfully cleared application global commands.");
   } catch (error) {
     console.error(error);
   }

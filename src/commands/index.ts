@@ -3,5 +3,5 @@ import * as accept from "./acceptuser"
 
 export const commands = {
     ping,
-    accept,
+    accept
 }
