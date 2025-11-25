@@ -1,5 +1,5 @@
 import { Client } from "discord.js";
-import { config } from "./init";
+import { env } from "./init";
 import { deployCommands, executeCommand } from "./commands/deploy";
 
 // Giving bot permissions
@@ -26,5 +26,5 @@ client.on("interactionCreate", async (interaction) => {
   executeCommand(interaction);
 });
 
-client.login(config.DISCORD_TOKEN);
+client.login(env.DISCORD_TOKEN);
 

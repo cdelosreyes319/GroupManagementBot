@@ -8,7 +8,7 @@ if (!DISCORD_TOKEN || !DISCORD_CLIENT_ID) {
     throw new Error("Missing environment variables");
 }
 
-export const config = {
+export const env = {
   DISCORD_TOKEN,
   DISCORD_CLIENT_ID,
 };
