@@ -1,5 +1,5 @@
 import { REST, Routes } from "discord.js";
-import { env } from "./init";
+import { env, groups } from "./init";
 import { commands } from "./commands/index";
 
 const commandsData = Object.values(commands).map((command) => command.data);
@@ -40,11 +40,24 @@ export async function getCommands() {
   }
 }
 
+export async function getGuildCommands({ guildId }: DeployCommandsProps) {
+  try {
+    console.log("Fetching commands");
+
+    const guildCommands = await rest.get(
+      Routes.applicationGuildCommands(env.DISCORD_CLIENT_ID, guildId)
+    );
+    console.log(guildCommands);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 export async function clearGlobalCommands() {
   try {
     console.log("Clearing global commands...");
 
-    const globalCommands = await rest.put(
+    await rest.put(
       Routes.applicationCommands(env.DISCORD_CLIENT_ID),
       {
         body: []
@@ -62,3 +75,10 @@ export function executeCommand(interaction : any) {
     commands[commandName as keyof typeof commands].execute(interaction);
   }
 }
+
+/*(async () => {
+  //console.log("Guild ID we are fetching:", groups.DISCORD_CORPS_ID);
+
+  //await getGuildCommands({guildId: groups.DISCORD_CORPS_ID.toString()});
+  //await getCommands();
+})()*/
