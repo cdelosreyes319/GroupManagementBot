@@ -13,7 +13,6 @@ type DeployCommandsProps = {
 export async function deployCommands({ guildId }: DeployCommandsProps) {
   try {
     console.log("Started refreshing application (/) commands.");
-
     await rest.put(
       Routes.applicationGuildCommands(env.DISCORD_CLIENT_ID, guildId),
       {
@@ -69,16 +68,8 @@ export async function clearGlobalCommands() {
   }
 }
 
-export function executeCommand(interaction : any) {
-  const { commandName } = interaction;
-  if (commands[commandName as keyof typeof commands]) {
-    commands[commandName as keyof typeof commands].execute(interaction);
-  }
-}
-
-/*(async () => {
-  //console.log("Guild ID we are fetching:", groups.DISCORD_CORPS_ID);
-
+(async () => {
+  await deployCommands({guildId: groups.DISCORD_CORPS_ID});
   //await getGuildCommands({guildId: groups.DISCORD_CORPS_ID.toString()});
   //await getCommands();
-})()*/
+})()
