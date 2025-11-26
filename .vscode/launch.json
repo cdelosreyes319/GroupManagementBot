@@ -24,6 +24,26 @@
             "type": "node",
             "console": "integratedTerminal"
         },
+        {
+            "name": "Deploy Commands",
+            "request": "launch",
+            "runtimeArgs": [
+                "dotenvx",
+                "run",
+                "--",
+                "node",
+                "--inspect",
+                "./node_modules/.bin/tsx",
+                "watch",
+                "src/deploy-commands.ts"
+            ],
+            "runtimeExecutable": "npx",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "type": "node",
+            "console": "integratedTerminal"
+        },
     {
         "name": "Attach by Process ID",
         "processId": "${command:PickProcess}",
