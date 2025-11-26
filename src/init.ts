@@ -1,7 +1,6 @@
 //init.ts
-import dotenv from "dotenv";
-dotenv.config();
-require('@dotenvx/dotenvx').config();
+import dotenvx from "@dotenvx/dotenvx";
+dotenvx.config();
 
 const { DISCORD_TOKEN, DISCORD_CLIENT_ID, ROBLOX_TOKEN, BLOXLINK_KEY } = process.env;
 const ROBLOX_CORPS_ID = "13206132";
