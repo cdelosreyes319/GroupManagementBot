@@ -1,6 +1,6 @@
 import { Client } from "discord.js";
 import { env } from "./init";
-import { clearGlobalCommands, deployCommands, executeCommand, getCommands } from "./deploy-commands";
+import { commands } from "./commands/index"
 
 // Giving bot permissions
 const client = new Client({
@@ -16,14 +16,17 @@ client.once("clientReady", async () => {
 });
 
 client.on("guildCreate", async (guild) => {
-  await deployCommands({ guildId: guild.id });
+  //await deployCommands({ guildId: guild.id });
 });
 
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isCommand()) {
+  if (!interaction.isChatInputCommand()) {
     return;
   }
-  executeCommand(interaction);
+  const { commandName } = interaction;
+    if (commands[commandName as keyof typeof commands]) {
+      commands[commandName as keyof typeof commands].execute(interaction);
+    }
 });
 
 client.login(env.DISCORD_TOKEN);
