@@ -22,7 +22,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     if (user == null)
         return interaction.reply({ content: 'User not found!', flags: MessageFlags.Ephemeral })
 
-    const response = await fetch(`https://api.blox.link/v4/public/guilds/${groups.DISCORD_CORPS_ID}/discord-to-roblox/${user.id}`, { headers: { "Authorization": "0e0bd54b-83a9-4d10-b126-89c7667677d8" } })
+    const response = await fetch(`https://api.blox.link/v4/public/guilds/${groups.DISCORD_CORPS_ID}/discord-to-roblox/${user.id}`, { headers: { "Authorization": env.BLOXLINK_KEY.toString() } })
     console.log(response.json());
     return interaction.reply({ content: 'Secret Pong!', flags: MessageFlags.Ephemeral });
 }
