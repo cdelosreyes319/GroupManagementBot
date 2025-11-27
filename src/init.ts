@@ -23,3 +23,7 @@ export const groups = {
   DISCORD_CORPS_ID,
   ROBLOX_MAIN_ID
 }
+
+export function getCorpsID() {
+  return DISCORD_CORPS_ID;
+}
