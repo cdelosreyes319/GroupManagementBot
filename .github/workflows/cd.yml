@@ -1,0 +1,42 @@
+name: Deployment to AWS EC2 instance
+run-name: CD
+on:
+  push:
+    branches:
+      - 'releases/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies and production build
+        run: |
+            npm ci
+            npm run build
+
+      - name: Upload release to remote
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "dist/*,.env"
+          target: "/prod-GroupManagementBot/"
+    
+  initialise:
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+      - name: Restart app
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+                cd /prod-GroupManagementBot
+                pm2 restart myapp
