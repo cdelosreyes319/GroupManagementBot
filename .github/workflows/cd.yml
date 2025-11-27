@@ -14,34 +14,45 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-
-      - name: Install dependencies and production build
+      
+      - name: Deploy release to staging environment
         run: |
             npm ci
             npm run build
+      
+      # TODO: add staging tests
 
-      - name: Upload release to remote
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "dist/*,.env.ci"
-          target: "/home/ubuntu/prod-GroupManagementBot"
-
-      - name: Install dotenvx (if required)
+      - name: Bring production offline for deployment
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-                if npm list -g | grep -q @dotenvx/dotenvx; then
-                    sudo npm install @dotenvx/dotenvx -g
-                    echo "Successfully installed dotenvx!"
-                else
-                    echo "dotenvx already installed!"
-                fi
+                pm2 stop GroupManagementBot
+
+      - name: Deploy release to production
+        uses: appleboy/rsync-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: |
+                dist/
+                package.json
+                package-lock.json
+                .env.ci
+          target: "/home/ubuntu/prod-GroupManagementBot"
+          delete: true
+      
+      - name: Update production dependencies
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+                npm ci --omit=dev
     
   start:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
@@ -49,7 +60,7 @@ jobs:
     needs: deploy
     
     steps:
-      - name: Restart app
+      - name: Bring production online
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
