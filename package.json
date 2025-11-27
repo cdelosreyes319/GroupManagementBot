@@ -11,9 +11,9 @@
     "vitest": "^4.0.14"
   },
   "scripts": {
-    "dev": "npx dotenvx run -- tsx watch src/main.ts",
-    "deploy-commands": "npx dotenvx run -- tsx watch src/deploy-commands.ts",
+    "dev": "npx dotenvx run -f .env.ci -- tsx watch src/main.ts",
+    "deploy-commands": "npx dotenvx run -f .env.ci -- tsx watch src/deploy-commands.ts",
     "build": "tsup src/main.ts --minify",
-    "tests": "vitest run"
+    "tests": "npx dotenvx run -f .env.ci -- vitest run"
   }
 }
