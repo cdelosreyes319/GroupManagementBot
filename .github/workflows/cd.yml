@@ -17,7 +17,7 @@ jobs:
 
       - name: Install dependencies and production build
         run: |
-            npm ci --production
+            npm ci
             npm run build
 
       - name: Upload release to remote
