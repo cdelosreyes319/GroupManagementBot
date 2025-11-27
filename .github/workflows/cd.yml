@@ -32,7 +32,7 @@ jobs:
                 pm2 stop GroupManagementBot
 
       - name: Deploy release to production
-        uses: appleboy/rsync-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
@@ -43,7 +43,7 @@ jobs:
                 package-lock.json
                 .env.ci
           target: "/home/ubuntu/prod-GroupManagementBot"
-          delete: true
+          rm: true
       
       - name: Update production dependencies
         uses: appleboy/ssh-action@v1.0.3
