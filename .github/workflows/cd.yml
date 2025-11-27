@@ -26,7 +26,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "dist/*,.env"
+          source: "dist/*,.env.ci"
           target: "/home/ubuntu/prod-GroupManagementBot"
     
   start:
@@ -45,8 +45,10 @@ jobs:
                 cd /home/ubuntu/prod-GroupManagementBot
                 if pm2 list | grep -q GroupManagementBot; then
                     echo "Restarting existing app..."
-                    pm2 restart myapp
+                    pm2 restart GroupManagementBot --update-env
                 else
                     echo "Starting app for the first time..."
-                    pm2 start dist/index.js --name GroupManagementBot
+                    pm2 start dist/main.js --name GroupManagementBot
                 fi
+
+                pm2 save
