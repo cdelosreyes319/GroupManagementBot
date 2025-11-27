@@ -1,7 +1,4 @@
 //init.ts
-import dotenvx from "@dotenvx/dotenvx";
-dotenvx.config();
-
 const { DISCORD_TOKEN, DISCORD_CLIENT_ID, ROBLOX_TOKEN, BLOXLINK_KEY } = process.env;
 const ROBLOX_CORPS_ID = "13206132";
 const DISCORD_CORPS_ID = "1195572029412364408";
