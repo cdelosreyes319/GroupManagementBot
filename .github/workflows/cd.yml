@@ -63,6 +63,6 @@ jobs:
                 else
                     echo "Starting app for the first time..."
                     DOTENV_PRIVATE_KEY_CI="${{ secrets.DOTENV_PRIVATE_KEY_CI }}" \
-                    npx dotenvx run --pm2 start dist/main.js --name GroupManagementBot
+                    npx dotenvx run -- pm2 start dist/main.js --name GroupManagementBot
                     pm2 save
                 fi
