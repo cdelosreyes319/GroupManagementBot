@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "npx dotenvx run -- tsx watch src/main.ts",
     "deploy-commands": "npx dotenvx run -- tsx watch src/deploy-commands.ts",
-    "build": "tsup src/main.ts --minify"
+    "build": "tsup src/main.ts --minify",
+    "tests": "vitest run"
   }
 }
