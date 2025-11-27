@@ -45,7 +45,6 @@ jobs:
                 package-lock.json
                 .env.ci
           target: "/home/ubuntu/prod-GroupManagementBot"
-          rm: true
       
       - name: Update production dependencies
         uses: appleboy/ssh-action@v1.0.3
