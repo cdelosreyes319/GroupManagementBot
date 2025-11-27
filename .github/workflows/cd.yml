@@ -41,7 +41,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "dist/,package.json,package-lock.json,.env.ci"
           target: "/home/ubuntu/prod-GroupManagementBot"
-          rm: true
       
       - name: Update production dependencies
         uses: appleboy/ssh-action@v1.0.3
