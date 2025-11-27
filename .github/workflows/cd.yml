@@ -1,12 +1,15 @@
 name: Deployment to AWS EC2 instance
-run-name: CD
+run-name: production CD
 on:
-  push:
-    branches:
-      - 'releases/**'
+    workflow_run:
+        workflows: ["Run Tests for Production"]
+        types:
+            - completed
+
 
 jobs:
   deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -14,7 +17,7 @@ jobs:
 
       - name: Install dependencies and production build
         run: |
-            npm ci
+            npm ci --production
             npm run build
 
       - name: Upload release to remote
@@ -26,7 +29,8 @@ jobs:
           source: "dist/*,.env"
           target: "/prod-GroupManagementBot/"
     
-  initialise:
+  start:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     needs: deploy
     
@@ -39,4 +43,10 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
                 cd /prod-GroupManagementBot
-                pm2 restart myapp
+                if pm2 list | grep -q GroupManagementBot; then
+                    echo "Restarting existing app..."
+                    pm2 restart myapp
+                else
+                    echo "Starting app for the first time..."
+                    pm2 start dist/index.js --name GroupManagementBot
+                fi

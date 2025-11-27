@@ -1,6 +1,9 @@
-name: Run Tests
-run-name: CI
-on: [push]
+name: Run Tests for Production
+run-name: production CI
+on: 
+  push:
+    branches:
+      - 'release/**'
 
 jobs:
   Unit-Tests:
@@ -20,8 +23,8 @@ jobs:
         run: npm ci
       - name: Run Tests
         run: npm run tests
-      #  env:
-      #    DOTENV_PRIVATE_KEY_CI:
+        env:
+          DOTENV_PRIVATE_KEY_CI: ${{ secrets.DOTENV_PRIVATE_KEY_CI }}
       #- run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
       #- run: echo "🖥️ The workflow is now ready to test your code on the runner."
       #- name: List files in the repository
