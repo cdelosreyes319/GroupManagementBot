@@ -45,10 +45,11 @@ jobs:
                 cd /home/ubuntu/prod-GroupManagementBot
                 if pm2 list | grep -q GroupManagementBot; then
                     echo "Restarting existing app..."
-                    pm2 restart GroupManagementBot --update-env
+                    pm2 restart GroupManagementBot
                 else
                     echo "Starting app for the first time..."
-                    pm2 start dist/main.js --name GroupManagementBot
+                    DOTENV_PRIVATE_KEY_CI="${{ secrets.DOTENV_PRIVATE_KEY_CI }}" \
+                    npx dotenvx run --pm2 start dist/main.js --name GroupManagementBot
                 fi
 
                 pm2 save
