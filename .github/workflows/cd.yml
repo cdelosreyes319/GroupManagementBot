@@ -27,7 +27,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "dist/*,.env"
-          target: "/prod-GroupManagementBot/"
+          target: "/home/ubuntu/prod-GroupManagementBot"
     
   start:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
@@ -42,7 +42,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-                cd /prod-GroupManagementBot
+                cd /home/ubuntu/prod-GroupManagementBot
                 if pm2 list | grep -q GroupManagementBot; then
                     echo "Restarting existing app..."
                     pm2 restart myapp
