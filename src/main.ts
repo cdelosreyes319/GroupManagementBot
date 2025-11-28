@@ -2,6 +2,7 @@ import { Client } from "discord.js";
 import { env } from "./init";
 import { commands, contextmenus } from "./commands/index";
 import { setCookie } from "noblox.js";
+import { deployCommands } from "./deploy-commands";
 
 // Giving bot permissions
 const client = new Client({
@@ -10,16 +11,16 @@ const client = new Client({
 
 client.once("clientReady", async () => {
   //Add commands for servers bot is already in
-  //for (const [id, guild] of client.guilds.cache) {
-  //  await deployCommands({guildId: guild.id});
-  //}
+  for (const [id, guild] of client.guilds.cache) {
+    await deployCommands({guildId: guild.id});
+  }
   const currentUser = await setCookie(env.ROBLOX_TOKEN);
   console.log(`Logged in as ${currentUser.name} [${currentUser.id}]`);
   console.log(`${client.user?.username} is ready!`);
 });
 
 client.on("guildCreate", async (guild) => {
-  //await deployCommands({ guildId: guild.id });
+  await deployCommands({ guildId: guild.id });
 });
 
 client.on("interactionCreate", async (interaction) => {

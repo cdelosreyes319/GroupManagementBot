@@ -11,6 +11,7 @@
     "vitest": "^4.0.14"
   },
   "scripts": {
+    "dev-mode": "npm run tests-dev & npm run dev",
     "dev": "npx dotenvx run -f .env.dev -- tsx watch src/main.ts",
     "deploy-commands-dev": "npx dotenvx run -f .env.dev -- tsx src/deploy-commands.ts",
     "deploy-commands-prod": "npx dotenvx run -f .env.ci -- tsx src/deploy-commands.ts",

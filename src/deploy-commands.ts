@@ -70,11 +70,11 @@ export async function clearGlobalCommands() {
   }
 }
 
-(async () => {
+/*(async () => {
   await deployCommands({guildId: groups.DISCORD_CORPS_ID});
   await getGuildCommands({guildId: groups.DISCORD_CORPS_ID});
   //console.log(commandsData);
   return process.exit(0);
   //await getGuildCommands({guildId: groups.DISCORD_CORPS_ID.toString()});
   //await getCommands();
-})()
+})()*/
