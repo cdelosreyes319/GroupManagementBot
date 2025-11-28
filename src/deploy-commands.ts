@@ -1,9 +1,12 @@
 import { REST, Routes } from "discord.js";
 import { env, groups } from "./init";
-import { commands } from "./commands/index";
+import { commands, contextmenus } from "./commands/index";
 
-const commandsData = Object.values(commands).map((command) => command.data);
+const slashData = Object.values(commands).map((command) => command.data);
+const contextData = Object.values(contextmenus).map((command) => command.data);
 
+const commandsData = [...slashData, ...contextData];
+//const commandsData = {...Object.values(commands).map((command) => command.data), ...Object.values(contextmenus).map((command) => command.data)};
 const rest = new REST({ version: "10" }).setToken(env.DISCORD_TOKEN);
 
 type DeployCommandsProps = {
@@ -19,7 +22,6 @@ export async function deployCommands({ guildId }: DeployCommandsProps) {
         body: commandsData,
       }
     );
-
     console.log("Successfully reloaded application (/) commands.");
   } catch (error) {
     console.error(error);
@@ -70,6 +72,8 @@ export async function clearGlobalCommands() {
 
 (async () => {
   await deployCommands({guildId: groups.DISCORD_CORPS_ID});
+  await getGuildCommands({guildId: groups.DISCORD_CORPS_ID});
+  //console.log(commandsData);
   return process.exit(0);
   //await getGuildCommands({guildId: groups.DISCORD_CORPS_ID.toString()});
   //await getCommands();
