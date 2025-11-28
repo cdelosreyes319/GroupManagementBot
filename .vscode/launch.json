@@ -8,16 +8,10 @@
             "name": "Dev Mode Launch",
             "request": "launch",
             "runtimeArgs": [
-                "dotenvx",
                 "run",
-                "--",
-                "node",
-                "--inspect",
-                "./node_modules/.bin/tsx",
-                "watch",
-                "src/main.ts"
+                "dev",
             ],
-            "runtimeExecutable": "npx",
+            "runtimeExecutable": "npm",
             "skipFiles": [
                 "<node_internals>/**"
             ],
