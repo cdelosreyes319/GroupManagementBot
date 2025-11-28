@@ -4,14 +4,9 @@
 // **********
 // discordUser : Mention of user
 // **********
-// TODO
-// 1. Parse mention into usable user data
-// 2. Match user to bloxlink database
-// 3. Accept user in both Neuvieme and Main groups if pending
-// 4. Read back membership status of user in both groups
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { groups, env } from "../init";
-import * as noblox from "noblox.js";
+import { getRankInGroup, getJoinRequest, handleJoinRequest} from "noblox.js";
 
 export const data = new SlashCommandBuilder()
   .setName("accept")
@@ -34,9 +29,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         
         if (!robloxID)
           return interaction.editReply({content: '❌Unexpected error happened! (RobloxID not found.)'});
-        if (await noblox.getRankInGroup(ROBLOX_MAIN_ID, robloxID) == 0) {
-          if (await noblox.getJoinRequest(ROBLOX_MAIN_ID, robloxID)) { 
-            await noblox.handleJoinRequest(ROBLOX_MAIN_ID, robloxID, true);
+        if (await getRankInGroup(ROBLOX_MAIN_ID, robloxID) == 0) {
+          if (await getJoinRequest(ROBLOX_MAIN_ID, robloxID)) { 
+            await handleJoinRequest(ROBLOX_MAIN_ID, robloxID, true);
             var msg = await interaction.fetchReply();
             interaction.editReply({content: msg.content + `\n✅<@!${user.id}> has been accepted to the main group!`});
           }
@@ -48,9 +43,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             var msg = await interaction.fetchReply();
             interaction.editReply({content: msg.content + `\n✅<@!${user.id}> is already in main group!`});
         }
-        if (await noblox.getRankInGroup(ROBLOX_CORPS_ID, robloxID) == 0) {
-          if (await noblox.getJoinRequest(ROBLOX_CORPS_ID, robloxID)) { 
-            await noblox.handleJoinRequest(ROBLOX_CORPS_ID, robloxID, true); 
+        if (await getRankInGroup(ROBLOX_CORPS_ID, robloxID) == 0) {
+          if (await getJoinRequest(ROBLOX_CORPS_ID, robloxID)) { 
+            await handleJoinRequest(ROBLOX_CORPS_ID, robloxID, true); 
             var msg = await interaction.fetchReply();
             interaction.editReply({content: msg.content + `\n✅<@!${user.id}> has been accepted to the corps!`});
           }
