@@ -12,8 +12,8 @@
   },
   "scripts": {
     "dev": "npx dotenvx run -f .env.dev -- tsx watch src/main.ts",
-    "deploy-commands-dev": "npx dotenvx run -f .env.dev -- tsx watch src/deploy-commands.ts",
-    "deploy-commands-prod": "npx dotenvx run -f .env.ci -- tsx watch src/deploy-commands.ts",
+    "deploy-commands-dev": "npx dotenvx run -f .env.dev -- tsx src/deploy-commands.ts",
+    "deploy-commands-prod": "npx dotenvx run -f .env.ci -- tsx src/deploy-commands.ts",
     "build": "tsup src/main.ts --minify",
     "tests": "npx dotenvx run -f .env.ci -- vitest run"
   }

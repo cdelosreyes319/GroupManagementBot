@@ -70,6 +70,7 @@ export async function clearGlobalCommands() {
 
 (async () => {
   await deployCommands({guildId: groups.DISCORD_CORPS_ID});
+  return process.exit(0);
   //await getGuildCommands({guildId: groups.DISCORD_CORPS_ID.toString()});
   //await getCommands();
 })()
