@@ -1,9 +1,9 @@
-import * as vi from "vitest";
-import * as config from "./init";
+import { describe, test, expect} from "vitest";
+import { getCorpsID, groups} from "./init";
 
-vi.describe("Vitest test", () => {
-    vi.test("Group ID is correct", () => {
-        vi.expect(config.getCorpsID()).toBe(config.groups.DISCORD_CORPS_ID);
+describe("Vitest test", () => {
+    test("Group ID is correct", () => {
+        expect(getCorpsID()).toBe(groups.DISCORD_CORPS_ID);
         // sup2
     })
 })

@@ -15,6 +15,7 @@
     "deploy-commands-dev": "npx dotenvx run -f .env.dev -- tsx src/deploy-commands.ts",
     "deploy-commands-prod": "npx dotenvx run -f .env.ci -- tsx src/deploy-commands.ts",
     "build": "tsup src/main.ts --minify",
+    "tests-dev": "npx dotenvx run -f .env.dev -- vitest run",
     "tests": "npx dotenvx run -f .env.ci -- vitest run"
   }
 }
