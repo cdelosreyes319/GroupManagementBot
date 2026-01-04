@@ -12,7 +12,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { groups, env } from "../init";
 import * as noblox from "noblox.js";
-
+// hi
 export const data = new SlashCommandBuilder()
   .setName("accept")
   .setDescription("Check & automatically accept user into corps & main groups.")
