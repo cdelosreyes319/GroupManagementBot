@@ -13,6 +13,7 @@ client.once("clientReady", async () => {
   //for (const [id, guild] of client.guilds.cache) {
   //  await deployCommands({guildId: guild.id});
   //}
+  console.log("RoToken: " + env.ROBLOX_TOKEN);
   const currentUser = await noblox.setCookie(env.ROBLOX_TOKEN);
   console.log(`Logged in as ${currentUser.name} [${currentUser.id}]`);
   console.log("Discord bot is ready! 🤖");
