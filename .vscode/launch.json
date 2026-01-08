@@ -10,6 +10,8 @@
             "runtimeArgs": [
                 "dotenvx",
                 "run",
+                "-f",
+                ".env.ci",
                 "--",
                 "node",
                 "--inspect",
