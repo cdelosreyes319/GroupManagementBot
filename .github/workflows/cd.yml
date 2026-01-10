@@ -14,7 +14,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-      
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - name: Deploy release to staging environment
         run: |
             npm ci
