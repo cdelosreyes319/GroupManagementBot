@@ -2,132 +2,132 @@
 
 ## Overview
 
-This document describes how GroupManagementBot is built **today** and how to grow it to satisfy
-`requirements.md` while keeping the same style: small files, one command per file, no giant modules.
+This document describes how GroupManagementBot is built **as it stands today** (the full feature set from
+`requirements.md` is implemented). It follows a consistent style: small files, one command per file, no giant
+modules.
 
-Guiding rules:
+Guiding rules the code follows:
 
-1. Keep the current architecture (`init.ts`, `main.ts`, `commands/index.ts` registry, one file per command).
-2. Add folders for shared logic instead of growing command files.
+1. Layered architecture: `commands` / `interactions` → `services` → `api` and `storage`; `ui`, `utils`, and
+   `config` may be imported by anyone. Never import upwards.
+2. Shared logic lives in `services/`, `api/`, `ui/`, or `utils/` — never in `main.ts` or `init.ts`.
 3. Stay light: this runs on a small EC2 instance. No big SDKs, bounded caches, minimal Discord intents.
 4. Stay readable: a junior developer should be able to follow any file top to bottom.
 5. Never touch secrets: `.env.ci` is encrypted with dotenvx and must stay that way.
 
-**Scope for Kiro:** everything in this document can be written and unit-tested inside the IDE with fake
-dependencies. Kiro does **not** create the Google Apps Script, register commands with Discord, or test against
-live Discord/Roblox. The Stats Endpoint format is documented below only so the bot side can be built against it.
+**Testing scope:** every service is unit-tested with fake dependencies (no network, no real secrets). The bot
+does **not** create the Google Apps Script, register commands with Discord automatically, or test against live
+Discord/Roblox. The Stats Endpoint format is documented below so the bot side agrees with the separately
+created script.
 
-### Current State (repository as found)
+### Command module contract
 
-```
-GroupManagementBot/
-├─ .github/workflows/
-│  ├─ ci.yml                    # on push to release/**: npm ci, npm run tests (dotenvx decrypts .env.ci)
-│  ├─ cd.yml                    # after CI succeeds: build, SSH stop pm2, scp dist+package files+.env.ci, npm ci --omit=dev, pm2 restart
-│  └─ github-actions-test.yml   # GitHub demo workflow, safe to delete
-├─ src/
-│  ├─ init.ts                   # reads env vars, throws if missing; exports env{} and groups{} (Roblox + Discord IDs)
-│  ├─ main.ts                   # creates discord.js Client, logs into Roblox via noblox.setCookie, routes slash commands
-│  ├─ deploy-commands.ts        # REST helper: registers commands for the Corps Discord server (run manually with tsx)
-│  ├─ main.test.ts              # 1 rudimentary vitest test
-│  └─ commands/
-│     ├─ index.ts               # `commands` object: { ping, accept }  <- registry
-│     ├─ ping.ts                # exports data (SlashCommandBuilder) + execute()
-│     ├─ acceptuser.ts          # /accept: Bloxlink fetch + noblox calls inline (works, but long and repetitive)
-│     ├─ rankuser.ts            # only TODO comments
-│     └─ promote.ts             # only TODO comments (to be deleted: /rank replaces it)
-├─ .env.ci                      # dotenvx-encrypted secrets (DISCORD_TOKEN, DISCORD_CLIENT_ID, ROBLOX_TOKEN, BLOXLINK_KEY)
-├─ package.json                 # discord.js 14, noblox.js 6, @dotenvx/dotenvx; tsup, tsx, typescript, vitest
-└─ tsconfig.json                # strict, commonjs, ES2020, rootDir src, outDir dist
-```
+Each command file exports `data` (a `SlashCommandBuilder`/`ContextMenuCommandBuilder`), an `access` level
+(`public` | `configurable` | `admin`), and `execute(interaction)`. Some also export an `autocomplete(...)`
+handler and a `configure(...)` function that injects a store or service at startup. `commands/index.ts`
+collects the slash commands into `commands` and the context-menu commands into `userContextMenus`; both
+`main.ts` (via the router) and `deploy-commands.ts` read from it.
 
-**Command module contract today:** each file exports `data` and `execute(interaction)`. `commands/index.ts`
-collects them and both `main.ts` and `deploy-commands.ts` read from it.
+### Build and deploy
 
-**Build and deploy today:** `tsup src/main.ts --minify` bundles `dist/main.js`; CD copies `dist/`,
-`package.json`, `package-lock.json` and `.env.ci` to `/home/ubuntu/prod-GroupManagementBot` and runs it with
-`dotenvx run -- pm2 start dist/main.js`. `deploy-commands.ts` is not part of the build and is run manually.
+`tsup src/main.ts --minify` bundles `dist/main.js`. CD copies `dist/`, `package.json`, `package-lock.json`, and
+`.env.ci` to `/home/ubuntu/prod-GroupManagementBot`, runs `npm ci --omit=dev --ignore-scripts`, then runs the
+bot with `dotenvx run -- pm2 start dist/main.js --name GroupManagementBot`. `deploy-commands.ts` is not part of
+the build; it is run manually with `npm run deploy-commands` after any command definition changes.
 
-**Issues found in the current code**
+> Installs use `--ignore-scripts` because noblox.js has a decorative `postinstall` figlet banner that can crash
+> on a missing font; it is not needed at runtime.
 
-| # | Observation | Consequence |
-|---|-------------|-------------|
-| 1 | No `api.ts` exists. The Bloxlink `fetch` is inline in `acceptuser.ts`. | Extract to `src/api/bloxlink.ts`. |
-| 2 | `acceptuser.ts` repeats `fetchReply` plus string-append with `var msg`, and some `editReply` calls are not awaited. | Rewrite with one list of lines, joined once. |
-| 3 | `main.ts` calls `execute(interaction)` without `await` or error handling. | Central router with try/catch. |
-| 4 | `main.ts` requests intents `GuildMessages`, `DirectMessages`, `GuildWebhooks`, `GuildPresences`. Presences is the most memory-hungry and is unused. | Use only `Guilds`, `GuildMembers`, `GuildMessages`, `GuildVoiceStates`. |
-| 5 | `init.ts` throws when env vars are missing, so any test importing it needs decrypted env. | Move constants to `config/constants.ts` (no env), keep `init.ts` as the facade. |
-| 6 | The `deploy-commands` script uses `tsx watch` for a one-shot script. | Change to `tsx`. |
-| 7 | `github-actions-test.yml` runs on every push and does nothing useful. | Delete. |
-| 8 | `DISCORD_CORPS_ID` is the Discord server ID (used for Bloxlink and command deployment) but the name suggests a Roblox group. | Keep the name (tests use it), add a clarifying comment. |
+### Resolved from the original codebase
+
+The initial repository had the Bloxlink fetch inline in `acceptuser.ts`, TODO-only `rankuser.ts`/`promote.ts`,
+an unguarded `interactionCreate` handler, over-broad intents (including the memory-hungry Presence intent), and
+env-coupled constants. These have all been resolved: external calls are extracted into `api/`, the router
+centralises dispatch and error handling, intents are minimal (`Guilds`, `GuildMembers`, `GuildMessages`,
+`GuildVoiceStates`), constants live in `config/constants.ts`, `promote.ts` is deleted, and the unused
+`github-actions-test.yml` workflow is removed. `DISCORD_CORPS_ID` remains the name of the **Discord server ID**
+(kept for backward compatibility with tests); `config/constants.ts` exposes it as `DISCORD_SERVER_ID` with a
+clarifying comment.
 
 ---
 
 ## Architecture
 
-### Target folder layout
-
-New folders and files are marked `+`. Existing files keep their names.
+### Folder layout (as built)
 
 ```
 src/
-├─ init.ts                       # KEEP: env validation; re-exports constants so old imports still work
-├─ main.ts                       # KEEP but thin: client, Roblox login, wiring, shutdown handler
-├─ deploy-commands.ts            # KEEP: now also deploys context-menu commands
-├─ config/                       # +
-│  ├─ constants.ts               # Group IDs, MANAGED_GROUPS, LIMITS. No env access.
-│  └─ rankSync.ts                # Rank Sync Table (data only) + its types
+├─ init.ts                       # env validation; re-exports constants (env, groups, getCorpsID)
+├─ main.ts                       # thin: client, stores, service wiring, router, activity events, shutdown
+├─ deploy-commands.ts            # REST helper: registers slash + context-menu commands (run manually)
+├─ config/
+│  ├─ constants.ts               # MANAGED_GROUPS, GroupKey, getManagedGroup, DISCORD_SERVER_ID, LIMITS
+│  └─ rankSync.ts                # Rank Sync Table (data only) + RankSyncRule type
 ├─ commands/
-│  ├─ index.ts                   # KEEP: registry (slash commands) + userContextMenus registry
-│  ├─ types.ts                   # + BotCommand type (data, access, execute, optional autocomplete)
-│  ├─ ping.ts
-│  ├─ acceptuser.ts              # rewritten
-│  ├─ whois.ts                   # + /whois
-│  ├─ robloxinfo.ts              # + context menu "Roblox Info"
-│  ├─ rankuser.ts                # implemented: /rank (with Corps sync)
-│  ├─ eventdm.ts                 # + /eventdm
-│  ├─ eventdmexclusions.ts       # + /eventdm-exclusions
-│  ├─ permissions.ts             # + /permissions
-│  ├─ userinfo.ts                # + /userinfo
-│  ├─ statssource.ts             # + /stats-source
-│  └─ statsalias.ts              # + /stats-alias
-│  # promote.ts is DELETED (replaced by /rank)
-├─ interactions/                 # + everything that is not a slash command
+│  ├─ index.ts                   # commands registry + userContextMenus registry
+│  ├─ types.ts                   # AccessLevel, BotCommand, UserContextMenuCommand
+│  ├─ ping.ts                    # /ping (public)
+│  ├─ acceptuser.ts              # /accept
+│  ├─ whois.ts                   # /whois
+│  ├─ robloxinfo.ts              # "Roblox Info" user context menu
+│  ├─ rankuser.ts                # /rank (with Corps sync)
+│  ├─ eventdm.ts                 # /eventdm
+│  ├─ eventdmexclusions.ts       # /eventdm-exclusions
+│  ├─ permissions.ts             # /permissions (admin)
+│  ├─ userinfo.ts                # /userinfo
+│  ├─ statssource.ts             # /stats-source (add/list/remove/edit/test + field-* subcommands)
+│  └─ statsalias.ts              # /stats-alias
+├─ interactions/                 # everything that is not a slash command
 │  ├─ router.ts                  # single entry point: guild check, permission check, dispatch, error handling
 │  ├─ customId.ts                # build/parse custom IDs like "eventdm:confirm:ab12cd34"
 │  ├─ eventDmInteractions.ts     # modal submit + Confirm/Cancel buttons + RSVP buttons
 │  └─ statsSourceInteractions.ts # modal submit for endpoint URL/secret
-├─ api/                          # + thin wrappers over anything outside the process (easy to fake in tests)
+├─ api/                          # thin wrappers over anything outside the process (easy to fake in tests)
 │  ├─ bloxlink.ts
-│  ├─ roblox.ts                  # noblox wrappers
+│  ├─ roblox.ts                  # noblox wrappers + bot user ID
 │  └─ statsEndpoint.ts           # calls a Google Apps Script endpoint
-├─ services/                     # + business logic; dependencies are passed in so tests can fake them
+├─ services/                     # business logic; dependencies are passed in so tests can fake them
 │  ├─ robloxAccount.ts           # Discord user -> RobloxAccount (bloxlink + small cache)
-│  ├─ groupAccess.ts             # "can the bot assign this rank" rules
-│  ├─ rankSyncService.ts         # pure: EF rank number -> Corps rank name / validation of the table
+│  ├─ accountLookup.ts           # configured singleton for findRobloxAccount (wires env + api)
+│  ├─ robloxInfo.ts              # group rank lines + headshot for /whois and the context menu
+│  ├─ groupAccess.ts             # "can the bot assign this rank" rules (pure)
+│  ├─ rankSyncService.ts         # pure: EF rank -> Corps rank name / validation of the table
 │  ├─ rankService.ts             # set rank in one group, then optional Corps sync
-│  ├─ permissionService.ts       # canUseCommand(), add/remove/list roles
-│  ├─ activityTracker.ts         # last-active timestamps, lazy save
+│  ├─ rankServiceInstance.ts     # configured singleton for the rank service
+│  ├─ permissionService.ts       # isAllowed (pure) + canUseCommand(), add/remove/list/reset roles
+│  ├─ activityTracker.ts         # last-active timestamps, lazy save (no repeating timer)
+│  ├─ activityTrackerInstance.ts # configured singleton over activity.json
 │  ├─ recipientSelector.ts       # pure: who receives an event DM
 │  ├─ eventDmService.ts          # pending previews, lock/cooldown, send loop
+│  ├─ eventDmInstance.ts         # configured singleton for the event-DM service
 │  ├─ pollService.ts             # RSVP recording, summary data, debounced summary edit
+│  ├─ pollServiceInstance.ts     # configured singleton for the poll service
 │  ├─ statsService.ts            # search sources, name list, cache
+│  ├─ statsServiceInstance.ts    # configured singleton for the stats service
+│  ├─ statsFields.ts             # pure: add/remove/move/validate stats-source fields
 │  └─ statsFormatter.ts          # sheet row + field config -> embed fields (pure)
-├─ storage/                      # +
-│  ├─ jsonFile.ts                # generic load/atomic-save helper used by the three stores
+├─ storage/
+│  ├─ jsonFile.ts                # generic load/atomic-save helper used by the stores
+│  ├─ paths.ts                   # getDataDir() (DATA_DIR or <cwd>/data), dataFilePath()
 │  ├─ settingsStore.ts           # SettingsStore interface + JSON implementation
-│  ├─ eventStore.ts              # polls / event records
-│  └─ types.ts                   # Settings, StatsSource, StatField, EventRecord types + defaults
-├─ ui/                           # +
-│  ├─ embeds.ts                  # success/warn/error embeds, roblox info embed, stats embed
+│  ├─ eventStore.ts              # polls / event records (prune to 20 records / 30 days)
+│  └─ types.ts                   # Settings, StatsSource, StatField, EventRecord, ActivityFile + defaults
+├─ ui/
+│  ├─ embeds.ts                  # success/warn/error, roblox info, event DM, poll summary, stats embeds
 │  └─ messages.ts                # shared user-facing text
-└─ utils/                        # +
+└─ utils/
    ├─ ttlCache.ts                # tiny bounded cache with expiry
    ├─ sleep.ts
    └─ text.ts                    # truncate(), normaliseName() (lowercase + trim)
 
 data/                            # runtime only, git-ignored: settings.json, events.json, activity.json (+ .bak)
 ```
+
+**Wiring pattern:** services and commands that need environment config or a store are wired once in
+`main.ts`'s `bootstrap()` through a `configureX(...)` function, and reached elsewhere through a matching
+`getX()` accessor (the `*Instance.ts` modules and the command `configure(...)` exports). This keeps `main.ts`
+as the single composition root and avoids global state leaking across modules. Test files live next to the code
+they test (`*.test.ts`).
 
 Test files live next to the code they test (`rankSyncService.test.ts` beside `rankSyncService.ts`), matching the
 existing `main.test.ts` style.
@@ -689,7 +689,7 @@ export interface SettingsStore {
 }
 ```
 
-### Rank Sync Table (`src/config/rankSync.ts`) — ASSUMED VALUES, owner to confirm
+### Rank Sync Table (`src/config/rankSync.ts`) — confirmed by the owner
 
 ```ts
 export type RankSyncRule = { efMin: number; efMax: number; efLabel: string; corpsRoleName: string };
@@ -697,20 +697,23 @@ export type RankSyncRule = { efMin: number; efMax: number; efLabel: string; corp
 export const RANK_SYNC_RULES: RankSyncRule[] = [ /* rows below */ ];
 ```
 
-| EF tier (assumed role names) | Assumed EF rank numbers | Corps rank it maps to |
-|------------------------------|-------------------------|-----------------------|
-| Conscrit | 1 – 9 | Recruit |
-| Soldat, Fusilier, Grenadier, Voltigeur | 10 – 29 | Soldier |
-| Caporal, Sergent, Sergent-Major, **Adjudant** | 30 – 59 | **NCO** |
-| Sous-Lieutenant, Lieutenant, Capitaine | 60 – 99 | Officer |
-| Chef de Bataillon, Major, Colonel | 100 – 149 | Field Officer |
-| Général de Brigade, Général de Division, Maréchal | 150 – 199 | General Staff |
-| Leadership ranks | 200 – 254 | *no rule: Corps rank is not changed* |
-| Guest (0) and Owner (255) | 0 and 255 | *never synced* |
+Empire Français uses small rank numbers (owner 255; Maréchal 19 down to Citoyen 1). The Corps side is matched by
+**role name** (not number). Confirmed mapping:
 
-The numbers are Roblox rank numbers (0–255) of the EF group; the Corps side is matched by **role name** (not
-number) so it works whatever numbers the Corps group uses. If a name does not match a Corps role, the startup
-check logs a warning and the sync reports a failure for that rule.
+| EF tier | EF rank numbers | Corps rank it maps to |
+|---------|-----------------|-----------------------|
+| Citoyen, Conscrit, Soldat, Caporal, Caporal Fourrier | 1 – 5 | Militaire du Rang |
+| Sergent, Sergent Major, Adjudant, Adjudant Sous-Officier | 6 – 9 | Sous-Officier |
+| Bénéficiaire d'Empire (custom, retired officers) | 10 | *no rule: Corps rank is not changed* |
+| Sous-Lieutenant, Lieutenant, Capitaine | 11 – 13 | Officier Subalterne |
+| Chef de Bataillon, Major, Colonel | 14 – 16 | Officier Supérieur |
+| Général de Brigade and up, Maréchal | 17 – 19 | *no rule: Corps appointments made manually* |
+| Empereur des Français (owner) | 255 | *never synced* |
+
+Rank 10 (Bénéficiaire d'Empire) sits between the NCO band (ends at 9) and the officer band (starts at 11), so it
+has no rule by design. Ranks above Colonel have no rule because those Corps appointments are manual. If a Corps
+role name does not exist in the Corps group, the startup check logs a warning and the sync reports a failure for
+that rule (the EF change is still kept).
 
 ---
 
@@ -742,7 +745,7 @@ Error replies are ephemeral. User-facing text lives in `ui/messages.ts`.
   No network, no real tokens, no real Discord.
 - Must-have tests:
   - `ttlCache` expiry and size cap; `normaliseName`, `truncate`.
-  - `canBotAssign`; `findSyncRule`, `validateRankSyncRules` (overlap, min > max, covers 0/255, the assumed table
+  - `canBotAssign`; `findSyncRule`, `validateRankSyncRules` (overlap, min > max, covers 0/255, the shipped table
     itself is valid), `findMissingCorpsRoles`; `setRankWithSync` for every `CorpsSyncOutcome`.
   - `canUseCommand` rules and permission add/remove/reset.
   - `selectRecipients`: excluded members do not use capacity, sender skipped, bots skipped, activity order,

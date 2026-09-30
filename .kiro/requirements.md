@@ -31,10 +31,10 @@ and a configurable stats card fed by officers' Google Sheets.
 
 ### Assumptions
 
-- The bot serves one Discord server (the ID already in `init.ts`).
+- The bot serves one Discord server (`DISCORD_SERVER_ID` = `1195572029412364408`, exposed via `init.ts`).
 - The bot's Roblox account already holds a rank high enough in both groups to rank people.
-- The rank numbers and Corps rank names in the Rank Sync Table are placeholders the owner will confirm; the
-  code must make them easy to edit in one file.
+- The rank numbers and Corps rank names in the Rank Sync Table are confirmed by the owner (see the Rank Sync
+  Table in `design.md`); they remain editable in one file (`src/config/rankSync.ts`).
 - "Latest active" means most recent Discord activity seen by the bot (messages, voice joins, command use),
   because Discord does not expose a "last seen" value. Tracking starts when the feature is deployed.
 

@@ -1,192 +1,192 @@
 # Implementation Plan
 
-- [ ] 1. Foundations: constants, scripts, utilities, UI helpers, client setup
-  - [ ] 1.1 Split constants from environment reading
+- [x] 1. Foundations: constants, scripts, utilities, UI helpers, client setup
+  - [x] 1.1 Split constants from environment reading
     - Create `src/config/constants.ts` with `MANAGED_GROUPS`, `GroupKey`, `getManagedGroup()`, the Discord server ID and the `LIMITS` object from the design document.
     - Update `src/init.ts` to import from it and keep exporting `env`, `groups` and `getCorpsID()` exactly as today so `main.test.ts` and `deploy-commands.ts` still work.
     - Add a comment that `DISCORD_CORPS_ID` is the Discord server ID used for Bloxlink and command deployment.
     - _Requirements: 1.6, 15.1, 15.3_
-  - [ ] 1.2 Package scripts, CI and repository cleanup
+  - [x] 1.2 Package scripts, CI and repository cleanup
     - In `package.json` add `"typecheck": "tsc --noEmit"` and change `deploy-commands` from `tsx watch` to `tsx`.
     - Delete `.github/workflows/github-actions-test.yml` and add `data/` to `.gitignore`.
     - In `ci.yml` add an `npm run typecheck` step before the tests step and add a `pull_request` trigger. Do not touch `cd.yml`.
     - _Requirements: 14.8, 13.1_
-  - [ ] 1.3 Utilities with unit tests
+  - [x] 1.3 Utilities with unit tests
     - Create `src/utils/ttlCache.ts` (max size with oldest-first eviction, per-entry expiry checked when read, no timers), `src/utils/text.ts` (`truncate`, `normaliseName`) and `src/utils/sleep.ts`.
     - Write `ttlCache.test.ts` and `text.test.ts` covering expiry, size cap, truncation, case and space handling.
     - _Requirements: 14.5, 11.3, 14.9_
-  - [ ] 1.4 Shared UI helpers
+  - [x] 1.4 Shared UI helpers
     - Create `src/ui/embeds.ts` with `successEmbed`, `warnEmbed`, `errorEmbed` (one colour set and footer) and `src/ui/messages.ts` with shared texts (not linked to Bloxlink, no permission, server only, generic error, timeout).
     - _Requirements: 2.6, 15.1_
-  - [ ] 1.5 Discord client intents and cache limits
+  - [x] 1.5 Discord client intents and cache limits
     - In `main.ts` change the intents to `Guilds`, `GuildMembers`, `GuildMessages`, `GuildVoiceStates` and add the `makeCache` limits from the design document.
     - Check that no existing code relies on the removed intents.
     - _Requirements: 7.7, 14.4_
 
-- [ ] 2. API layer: extract external calls
-  - [ ] 2.1 Bloxlink wrapper
+- [x] 2. API layer: extract external calls
+  - [x] 2.1 Bloxlink wrapper
     - Create `src/api/bloxlink.ts` with `fetchRobloxIdForDiscordUser(discordId)` returning a typed result (`ok`, `not_linked`, `bloxlink_error`, `timeout`) using `AbortSignal.timeout(LIMITS.httpTimeoutMs)`.
     - Reuse the exact URL and `Authorization` header currently used in `acceptuser.ts`.
     - _Requirements: 1.1, 1.2, 1.3_
-  - [ ] 2.2 Roblox (noblox.js) wrapper
+  - [x] 2.2 Roblox (noblox.js) wrapper
     - Create `src/api/roblox.ts` with the functions listed in the design document. Keep `noblox.setCookie` in `main.ts` and store the bot's user ID for `getBotUserId()`.
     - For previous usernames, inspect the installed noblox.js typings first; if no helper exists, call the public Roblox username-history endpoint with the shared timeout. Return `[]` on failure.
     - _Requirements: 1.6, 11.2, 11.6_
-  - [ ] 2.3 Account lookup service
+  - [x] 2.3 Account lookup service
     - Create `src/services/robloxAccount.ts` with `findRobloxAccount(discordUserId)` returning `LookupResult`, using a `TTLCache` (5 minutes, 200 entries) and taking the Bloxlink and username functions as parameters.
     - Write `robloxAccount.test.ts` with fake API functions: success, cache hit, not linked, timeout.
     - _Requirements: 1.1, 1.2, 1.4, 14.9_
 
-- [ ] 3. Storage
-  - [ ] 3.1 Generic JSON file helper
+- [x] 3. Storage
+  - [x] 3.1 Generic JSON file helper
     - Create `src/storage/jsonFile.ts`: load once, create defaults if missing, atomic save (temp file then rename), `.bak` copy, one promise chain per file so writes never overlap, optional restrictive file mode, and an option to choose "refuse to start" or "reset to empty" for unparsable files.
     - Write `jsonFile.test.ts` using a temporary folder.
     - _Requirements: 13.2, 13.3, 13.4, 13.5, 13.6, 14.9_
-  - [ ] 3.2 Types, settings store and event store
+  - [x] 3.2 Types, settings store and event store
     - Create `src/storage/types.ts` with `Settings`, `StatsSource`, `StatField`, `EventRecord`, `ActivityFile` and default values.
     - Create `src/storage/settingsStore.ts` (`SettingsStore` interface + `createJsonSettingsStore`) and `src/storage/eventStore.ts` (get, upsert, prune to 20 records and 30 days) on top of `jsonFile.ts`.
     - `DATA_DIR` is optional and defaults to `<cwd>/data`.
     - Write `settingsStore.test.ts` and `eventStore.test.ts` (defaults, save and reload, pruning, corrupt file refuses to start without being touched).
     - _Requirements: 13.1, 13.5, 13.7, 5.10_
-  - [ ] 3.3 Wire the stores into startup
+  - [x] 3.3 Wire the stores into startup
     - In `main.ts` create the stores before logging in and pass them to the router and services (no global variables).
     - _Requirements: 13.2, 13.8_
 
-- [ ] 4. Command registry, router and permissions
-  - [ ] 4.1 Command type and registry update
+- [x] 4. Command registry, router and permissions
+  - [x] 4.1 Command type and registry update
     - Create `src/commands/types.ts` (`AccessLevel`, `BotCommand`).
     - Add `export const access` and the header comment template to `ping.ts` (`public`) and `acceptuser.ts` (`configurable`).
     - Update `commands/index.ts` to keep the `commands` object and add an empty `userContextMenus` object; update `deploy-commands.ts` to deploy both and to mark commands server-only.
     - _Requirements: 8.1, 14.7, 15.5_
-  - [ ] 4.2 Permission service with tests
+  - [x] 4.2 Permission service with tests
     - Create `src/services/permissionService.ts` with the pure rule function plus `canUseCommand`, `addRole`, `removeRole`, `listRoles`, `resetCommand`. Only `configurable` commands from the registry are accepted.
     - Implement the fail-closed default, Administrator bypass, `@everyone` (guild ID) support and ignoring deleted roles.
     - Write `permissionService.test.ts` covering each rule.
     - _Requirements: 8.2, 8.3, 8.4, 8.7, 8.8, 8.9_
-  - [ ] 4.3 Interaction router
+  - [x] 4.3 Interaction router
     - Create `src/interactions/router.ts` and `src/interactions/customId.ts` (build and parse `feature:action:id[:extra]` with a 100-character guard).
     - Handle chat-input, context-menu, autocomplete, button and modal interactions with a central permission check, a central try/catch that sends a generic ephemeral error, a server-only check, and an audit log line for `configurable` and `admin` commands (no secrets).
     - Let buttons with the `eventdm:rsvp` prefix through without the server-only and permission checks (handler is added later).
     - Replace the `interactionCreate` handler in `main.ts` with an awaited call to the router. Write `customId.test.ts`.
     - _Requirements: 1.5, 8.10, 8.11, 5.11_
-  - [ ] 4.4 `/permissions` command
+  - [x] 4.4 `/permissions` command
     - Create `src/commands/permissions.ts` (`admin` access) with subcommands `add`, `remove`, `list`, `reset`, an autocomplete for `command` limited to `configurable` commands, and ephemeral embeds. Register it in `commands/index.ts`.
     - _Requirements: 8.5, 8.6, 8.7, 8.9_
 
-- [ ] 5. Checkpoint - make sure typecheck and all tests pass
+- [x] 5. Checkpoint - make sure typecheck and all tests pass
   - Run `npm run typecheck` and `npm run tests`, fix any failures, and stop for review.
 
-- [ ] 6. Convenient lookup commands and accept rewrite
-  - [ ] 6.1 Rewrite `/accept`
+- [x] 6. Convenient lookup commands and accept rewrite
+  - [x] 6.1 Rewrite `/accept`
     - Rewrite `acceptuser.ts` to use `findRobloxAccount`, loop over `MANAGED_GROUPS`, collect one line per group and reply once with an embed. Behaviour stays the same: accept if a join request is pending, otherwise report already-a-member or no-request.
     - _Requirements: 2.1, 2.2, 2.7, 2.8_
-  - [ ] 6.2 `/whois` and "Roblox Info" context menu
+  - [x] 6.2 `/whois` and "Roblox Info" context menu
     - Create `src/commands/whois.ts` (option `user` or `roblox-username`) and `src/commands/robloxinfo.ts` (user context menu). Both use one `buildRobloxInfoEmbed()` in `ui/embeds.ts` showing username, ID, profile link, headshot and rank name in each managed group.
     - Register both; access level `configurable`.
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [ ] 7. Ranking with Corps sync
-  - [ ] 7.1 Rank Sync Table and pure sync functions with tests
+- [x] 7. Ranking with Corps sync
+  - [x] 7.1 Rank Sync Table and pure sync functions with tests
     - Create `src/config/rankSync.ts` with the `RankSyncRule` type and `RANK_SYNC_RULES` using the assumed table from the design document (data only, with a comment that the numbers and Corps names must be confirmed by the owner).
     - Create `src/services/rankSyncService.ts` with `findSyncRule`, `validateRankSyncRules`, `findMissingCorpsRoles`.
     - Write `rankSyncService.test.ts`: lookup at range edges, ranks in no rule, overlap detection, invalid ranges, rules covering 0 or 255, and a test that the shipped table is valid.
     - _Requirements: 3.8, 3.9, 3.14, 3.15, 14.9_
-  - [ ] 7.2 Rank rules and rank service with tests
+  - [x] 7.2 Rank rules and rank service with tests
     - Create `src/services/groupAccess.ts` (`canBotAssign`) and `src/services/rankService.ts` (`setRankWithSync`, cached `getGroupRoles`) following the design document, with dependencies passed in.
     - Write `groupAccess.test.ts` and `rankService.test.ts` with fake API functions covering: guest and owner ranks, rank at or above the bot, target not in group, same rank, and every `CorpsSyncOutcome` (`off`, `no_rule`, `not_member`, `unchanged`, `changed`, `failed`), including that a Corps failure keeps the EF change and that ranking in Neuvième Corps never touches EF.
     - _Requirements: 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10, 3.11, 3.12, 14.9_
-  - [ ] 7.3 `/rank` command and cleanup
+  - [x] 7.3 `/rank` command and cleanup
     - Implement `rankuser.ts`: options `user`, `group` (fixed choices from `MANAGED_GROUPS`, value = key), `rank` (autocomplete from cached roles, max 25) and optional boolean `sync-corps` (default true). The reply shows old and new rank for each group touched, the Corps sync outcome, and the officer.
     - Delete `src/commands/promote.ts`, register `rank` in `commands/index.ts`, access level `configurable`.
     - _Requirements: 3.1, 3.2, 3.3, 3.13, 3.16, 2.7_
-  - [ ] 7.4 Startup check of the sync table
+  - [x] 7.4 Startup check of the sync table
     - In `main.ts` after the Roblox login, call `validateRankSyncRules` and `findMissingCorpsRoles` and log a warning for each problem without stopping the bot.
     - _Requirements: 3.14_
 
-- [ ] 8. Checkpoint - make sure typecheck and all tests pass
+- [x] 8. Checkpoint - make sure typecheck and all tests pass
   - Run `npm run typecheck` and `npm run tests`, fix any failures, and stop for review.
 
-- [ ] 9. Activity tracking
-  - [ ] 9.1 Activity tracker with tests
+- [x] 9. Activity tracking
+  - [x] 9.1 Activity tracker with tests
     - Create `src/services/activityTracker.ts` (`record`, `getLastActive`, `saveIfDue`, `saveNow`) backed by a `Map` and `activity.json` through `jsonFile.ts`, with pruning (90 days, 5000 entries) and a corrupt-file fallback to empty.
     - Write `activityTracker.test.ts` with an injected clock and fake file: save gap, pruning, entry cap, corrupt file fallback, no content stored.
     - _Requirements: 7.2, 7.3, 7.5, 7.6, 14.9_
-  - [ ] 9.2 Wire activity into the client
+  - [x] 9.2 Wire activity into the client
     - In `main.ts` record activity on `messageCreate` (non-bot, configured server) and `voiceStateUpdate` (joined or moved channel); in the router record it for every server interaction.
     - Add `SIGINT` and `SIGTERM` handlers that call `saveNow()`, destroy the client and exit.
     - _Requirements: 7.1, 7.4_
 
-- [ ] 10. Event DMs and exclusions
-  - [ ] 10.1 Recipient selection with tests
+- [x] 10. Event DMs and exclusions
+  - [x] 10.1 Recipient selection with tests
     - Create `src/services/recipientSelector.ts` with `selectRecipients` exactly as specified in the design document.
     - Write `recipientSelector.test.ts`: bots and sender removed, excluded-role members removed before the limit is applied (capacity carries to the next eligible member), activity ordering, no-activity fallback by join date, stable ordering, limit of 1 and 250.
     - _Requirements: 4.4, 4.5, 6.4, 14.9_
-  - [ ] 10.2 Event DM service with tests
+  - [x] 10.2 Event DM service with tests
     - Create `src/services/eventDmService.ts`: pending broadcast map (IDs and display names only, max 20, lazy expiry), per-guild sending lock and 5-minute cooldown, and `startSend(pending, sendOne, onProgress, sleepFn)` that continues after failures and returns sent and failed lists.
     - Write `eventDmService.test.ts` with fake `sendOne` and `sleepFn`: zero recipients, expiry, lock, cooldown, requester-only check, failures continue, summary counts.
     - _Requirements: 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 4.12, 14.5_
-  - [ ] 10.3 `/eventdm-exclusions` command
+  - [x] 10.3 `/eventdm-exclusions` command
     - Create `src/commands/eventdmexclusions.ts` with `add`, `remove`, `list` (deleted roles shown as "deleted role"), reading and saving `eventDmExcludedRoleIds` through the settings store. Register it; access level `configurable`.
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
-  - [ ] 10.4 `/eventdm` command, modal, preview and sending
+  - [x] 10.4 `/eventdm` command, modal, preview and sending
     - Create `src/commands/eventdm.ts` (options `role`, optional `limit` 1–250, optional `results-channel`) that validates the channel, stores a draft and opens the modal.
     - Create `src/interactions/eventDmInteractions.ts`: modal submit fetches guild members once, runs `selectRecipients`, shows the preview (counts, exact DM, poll on/off, Confirm/Cancel); button handler checks the requester, applies lock and cooldown, sends the DM embeds with `allowedMentions: { parse: [] }`, updates progress, and posts the summary of sent and failed.
     - Register the handler under the `eventdm` prefix in the router; access level `configurable`.
     - _Requirements: 4.1, 4.2, 4.3, 4.6, 4.7, 4.8, 4.9, 4.13, 4.14_
 
-- [ ] 11. Attendance poll
-  - [ ] 11.1 Poll service with tests
+- [x] 11. Attendance poll
+  - [x] 11.1 Poll service with tests
     - Create `src/services/pollService.ts`: `recordAnswer`, `buildSummary`, and `requestSummaryEdit` with one debounce timer per active poll (`unref()`, cleared when fired) and an injectable `setTimeout`.
     - Write `pollService.test.ts` with fake timers and a fake event store: answer replaced, closed poll, non-recipient ignored, summary counts, name truncation (20 per answer plus "+N more"), debounce collapses many answers into one edit, missing summary message is logged and does not throw.
     - _Requirements: 5.4, 5.5, 5.6, 5.7, 5.8, 14.5, 14.9_
-  - [ ] 11.2 Poll buttons, summary message and RSVP handler
+  - [x] 11.2 Poll buttons, summary message and RSVP handler
     - In the `/eventdm` confirm flow, when a `results-channel` was given: create the `EventRecord`, post the summary embed and save its message ID before sending, attach the three RSVP buttons (`eventdm:rsvp:<eventId>:yes|maybe|no`) to each DM, add delivered users to `recipientIds` and count failures in `dmFailedCount`.
     - When no `results-channel` was given, attach no buttons and store no poll.
     - Implement the RSVP handler in `eventDmInteractions.ts` (works in DMs): record the answer, update the DM to show "Your answer: …" while keeping the buttons, request a debounced summary edit, and on a closed poll remove the buttons and say it is closed.
     - Confirm that RSVP buttons keep working after a restart because the record is loaded from `events.json`.
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.6, 5.9, 5.11_
 
-- [ ] 12. Checkpoint - make sure typecheck and all tests pass
+- [x] 12. Checkpoint - make sure typecheck and all tests pass
   - Run `npm run typecheck` and `npm run tests`, fix any failures, and stop for review.
 
-- [ ] 13. Stats
-  - [ ] 13.1 Stats Endpoint client with tests
+- [x] 13. Stats
+  - [x] 13.1 Stats Endpoint client with tests
     - Create `src/api/statsEndpoint.ts`: `queryStatsEndpoint(source, usernames)` with the URL host allow-list, shared timeout, redirect following, request body exactly as in the design document, a hand-written response type guard, and mapping of error codes to plain messages. Never log the URL or secret.
     - Write `statsEndpoint.test.ts` with a fake `fetch`: valid found and not-found responses, each error code, malformed JSON, wrong host, timeout.
     - _Requirements: 9.2, 12.1, 12.2, 12.3, 12.4, 12.5, 14.2_
-  - [ ] 13.2 Formatter with tests
+  - [x] 13.2 Formatter with tests
     - Create `src/services/statsFormatter.ts` (`formatValue`, `formatRatio`, `buildEmbedFields`) with Discord length limits.
     - Write `statsFormatter.test.ts`: blank cells, numbers, percent rule, zero deaths, long text, 25-field limit.
     - _Requirements: 9.6, 10.7, 10.8, 14.9_
-  - [ ] 13.3 Stats service with tests
+  - [x] 13.3 Stats service with tests
     - Create `src/services/statsService.ts`: build the ordered, de-duplicated name list (current, previous, aliases), query sources with at most 3 in flight, cache results (60 seconds, 100 entries), collect failures.
     - Write `statsService.test.ts` with a fake endpoint: current-name match, old-name match flag, alias match, not found, one source failing while another succeeds, cache hit, username history failing.
     - _Requirements: 10.2, 10.5, 10.6, 11.1, 11.2, 11.3, 11.4, 11.6_
-  - [ ] 13.4 `/stats-source` add, list, remove, edit, test
+  - [x] 13.4 `/stats-source` add, list, remove, edit, test
     - Create `src/commands/statssource.ts` and `src/interactions/statsSourceInteractions.ts`. `add` collects options, opens a modal for URL and secret, validates the host, runs a test call and saves only on success. `list` never shows secrets or full URLs. `test` reports missing configured headers.
     - Register the command and the `statssource` interaction prefix; access level `configurable`.
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.7, 9.8, 9.9_
-  - [ ] 13.5 Field configuration subcommands
+  - [x] 13.5 Field configuration subcommands
     - Add `field-add`, `field-add-ratio`, `field-remove`, `field-move`, `field-list` (split into `src/commands/statssourceFields.ts` if `statssource.ts` passes ~200 lines).
     - Write tests for the pure helpers that validate, add, remove and reorder fields.
     - _Requirements: 9.5, 9.6_
-  - [ ] 13.6 `/stats-alias`
+  - [x] 13.6 `/stats-alias`
     - Create `src/commands/statsalias.ts` with `add`, `remove`, `list` keyed by Roblox user ID, at most 10 aliases per player; access level `configurable`; register it.
     - _Requirements: 11.5, 11.7_
-  - [ ] 13.7 `/userinfo`
+  - [x] 13.7 `/userinfo`
     - Create `src/commands/userinfo.ts` with options `user` and optional `source` (autocomplete). Use `findRobloxAccount`, group ranks and `statsService`, and build up to 3 embeds per the design layout. Name failing sources; when nothing is found list the sources searched and names tried.
     - Register it; access level `configurable`.
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.9, 11.4_
 
-- [ ] 14. Documentation and final verification
-  - [ ] 14.1 README
+- [x] 14. Documentation and final verification
+  - [x] 14.1 README
     - Expand `README.md`: what the bot does, the command list with access levels, running `/permissions add` after first deploy, how the rank sync table works and where to edit it, event DM and exclusions, running tests and typecheck, running `npm run deploy-commands` after command changes, and where `data/` lives and why it must not be deleted.
     - State that connecting Google Sheets requires an officer-created endpoint that is documented separately.
     - _Requirements: 15.4, 13.8_
-  - [ ] 14.2 Security and memory sweep
+  - [x] 14.2 Security and memory sweep
     - Search the code for logging of tokens, endpoint URLs or secrets and remove any found.
     - Confirm every cache and map has a maximum size and an expiry, that the only timer is the per-poll debounce, and that no new heavy dependency was added.
     - _Requirements: 14.1, 14.2, 14.5, 14.6_
-  - [ ] 14.3 Final verification
+  - [x] 14.3 Final verification
     - Run `npm run typecheck`, `npm run tests` and `npm run build`, fix any failure, and summarise the results.
     - _Requirements: 14.8, 14.9_
