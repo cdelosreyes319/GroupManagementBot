@@ -13,6 +13,8 @@ player info card fed by officers' Google Sheets, and logs every command run to a
 channel of your choice. Slash-command descriptions are localized in English and
 Chinese Simplified.
 
+This bot was made possible by using the AWS Kiro agent.
+
 ## Commands
 
 | Command | Access | What it does |
