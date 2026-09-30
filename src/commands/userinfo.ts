@@ -1,8 +1,8 @@
 // /userinfo
 // Arguments: user (Discord user), source (optional, autocomplete of source names)
 // Access: configurable
-// What it does: shows a player's info card — avatar, EF/Corps rank, special
-// assignments, regiment(s), and one table per stats source they appear in.
+// What it does: shows a player's info card — avatar, EF/Corps rank, regiments,
+// special assignments, imperial honours, and one table per stats source.
 import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
@@ -16,7 +16,7 @@ import { getAccountLookup } from "../services/accountLookup";
 import { getStatsService } from "../services/statsServiceInstance";
 import { getGroupRankLines, getHeadshot } from "../services/robloxInfo";
 import { buildStatCells, renderStatTable } from "../services/statsFormatter";
-import { buildUserInfoCard, warnEmbed, type UserInfoTable } from "../ui/embeds";
+import { buildUserInfoCard, warnEmbed, type UserInfoTable, type DisplayedRole } from "../ui/embeds";
 import { MESSAGES } from "../ui/messages";
 
 export const access: AccessLevel = "configurable";
@@ -50,15 +50,15 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
   await interaction.respond(choices);
 }
 
-// Returns the labels of configured roles the member holds, ignoring entries
-// whose role no longer exists in the server.
-function heldRoleLabels(member: GuildMember | null, entries: RoleLabel[]): string[] {
+// Returns the configured roles the member holds as {label, emoji}, ignoring
+// entries whose role no longer exists in the server.
+function heldRoles(member: GuildMember | null, entries: RoleLabel[]): DisplayedRole[] {
   if (!member) {
     return [];
   }
   return entries
     .filter((entry) => member.roles.cache.has(entry.roleId))
-    .map((entry) => entry.label);
+    .map((entry) => ({ label: entry.label, emoji: entry.emoji }));
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -78,8 +78,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const member = await interaction.guild!.members.fetch(user.id).catch(() => null);
   const stored = settings?.get();
-  const specialAssignments = heldRoleLabels(member, stored?.specialAssignments ?? []);
-  const regiments = heldRoleLabels(member, stored?.regiments ?? []);
+  const regiments = heldRoles(member, stored?.regiments ?? []);
+  const specialAssignments = heldRoles(member, stored?.specialAssignments ?? []);
+  const imperialHonours = heldRoles(member, stored?.imperialHonours ?? []);
 
   const [ranks, headshot, search] = await Promise.all([
     getGroupRankLines(account.userId),
@@ -99,8 +100,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     profileUrl: account.profileUrl,
     headshotUrl: headshot,
     ranks,
-    specialAssignments,
     regiments,
+    specialAssignments,
+    imperialHonours,
     tables,
   });
 

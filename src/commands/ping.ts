@@ -9,7 +9,7 @@ export const access: AccessLevel = "public";
 
 export const data = new SlashCommandBuilder()
   .setName("ping")
-  .setDescription("Replies with Pong!")
+  .setDescription("Replies with Pong to confirm the bot is online.")
   .setDMPermission(false);
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {

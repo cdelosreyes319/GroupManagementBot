@@ -1,10 +1,22 @@
 import { REST, Routes } from "discord.js";
 import { env, groups } from "./init";
 import { commands, userContextMenus } from "./commands/index";
+import { applyLocalizations } from "./i18n/applyLocalizations";
+import type { LocalizationMap } from "discord.js";
 
-// Collect both slash commands and context-menu commands as JSON payloads.
+// The structural shape applyLocalizations needs from a slash command builder.
+type LocalizableCommandData = {
+  setDescriptionLocalizations(map: LocalizationMap | null): unknown;
+  toJSON(): unknown;
+};
+
+// Apply description localizations to each slash command by its registry name,
+// then collect both slash and context-menu commands as JSON payloads. Context
+// menu commands have no description, so they are not localized.
 const commandsData = [
-  ...Object.values(commands).map((command) => command.data.toJSON()),
+  ...Object.entries(commands).map(([name, command]) =>
+    applyLocalizations(command.data as unknown as LocalizableCommandData, name).toJSON(),
+  ),
   ...Object.values(userContextMenus).map((command) => command.data.toJSON()),
 ];
 

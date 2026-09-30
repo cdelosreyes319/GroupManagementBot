@@ -34,9 +34,10 @@ export type StatsSource = {
 };
 
 // The bot's settings, stored in settings.json.
-// A Discord role paired with a display label, used for special assignments and
-// regiments shown on the /userinfo card.
-export type RoleLabel = { roleId: string; label: string };
+// A Discord role paired with a display label and an optional emoji, used for the
+// regiment, special-assignment, and imperial-honour lists shown on /userinfo.
+// The emoji (unicode or a custom `<:name:id>`) is shown before the label.
+export type RoleLabel = { roleId: string; label: string; emoji: string | null };
 
 export type Settings = {
   version: 1;
@@ -44,8 +45,9 @@ export type Settings = {
   eventDmExcludedRoleIds: string[];
   statsSources: StatsSource[];
   usernameAliases: Record<string, string[]>;
-  specialAssignments: RoleLabel[];
   regiments: RoleLabel[];
+  specialAssignments: RoleLabel[];
+  imperialHonours: RoleLabel[];
   logChannelId: string | null;
 };
 
@@ -82,8 +84,9 @@ export function defaultSettings(): Settings {
     eventDmExcludedRoleIds: [],
     statsSources: [],
     usernameAliases: {},
-    specialAssignments: [],
     regiments: [],
+    specialAssignments: [],
+    imperialHonours: [],
     logChannelId: null,
   };
 }

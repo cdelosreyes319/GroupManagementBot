@@ -1,20 +1,31 @@
 // /roles
-// Arguments: subcommand group special-assignment | regiment, each with
-//   add (role, optional label) | remove (role) | list
+// Arguments: subcommand group regiment | special-assignment | imperial-honour,
+//   each with add (role, optional label, optional emoji) | remove (role) | list
 // Access: configurable
-// What it does: manages the Discord roles that /userinfo shows as special
-// assignments (e.g. Eagle Bearer) and as regiments. Stores role IDs + labels.
+// What it does: manages the Discord roles /userinfo shows as regiments, special
+// assignments, and imperial honours. Stores role IDs, labels, and an optional
+// emoji per entry.
 import {
   SlashCommandBuilder,
   MessageFlags,
+  type SlashCommandSubcommandGroupBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
 import type { AccessLevel } from "./types";
 import type { SettingsStore } from "../storage/settingsStore";
-import type { RoleLabel } from "../storage/types";
+import type { RoleLabel, Settings } from "../storage/types";
 import { successEmbed, warnEmbed } from "../ui/embeds";
 
 export const access: AccessLevel = "configurable";
+
+// Maps each subcommand-group name to its settings key and a human-readable noun.
+const GROUPS = {
+  regiment: { key: "regiments", noun: "regiment" },
+  "special-assignment": { key: "specialAssignments", noun: "special assignment" },
+  "imperial-honour": { key: "imperialHonours", noun: "imperial honour" },
+} as const satisfies Record<string, { key: keyof Settings; noun: string }>;
+
+type GroupName = keyof typeof GROUPS;
 
 let settings: SettingsStore | null = null;
 
@@ -23,9 +34,9 @@ export function configure(settingsStore: SettingsStore): void {
   settings = settingsStore;
 }
 
-// Builds one subcommand group (special-assignment or regiment) with add/remove/list.
-function buildGroup(name: string, noun: string) {
-  return (group: import("discord.js").SlashCommandSubcommandGroupBuilder) =>
+// Builds one subcommand group with add/remove/list.
+function buildGroup(name: GroupName, noun: string) {
+  return (group: SlashCommandSubcommandGroupBuilder) =>
     group
       .setName(name)
       .setDescription(`Manage ${noun} roles shown on /userinfo.`)
@@ -34,7 +45,10 @@ function buildGroup(name: string, noun: string) {
           .setName("add")
           .setDescription(`Add a ${noun} role.`)
           .addRoleOption((o) => o.setName("role").setDescription("The Discord role.").setRequired(true))
-          .addStringOption((o) => o.setName("label").setDescription("Display label (defaults to the role name).")),
+          .addStringOption((o) => o.setName("label").setDescription("Display label (defaults to the role name)."))
+          .addStringOption((o) =>
+            o.setName("emoji").setDescription("Emoji shown before the label (unicode or a custom emoji)."),
+          ),
       )
       .addSubcommand((s) =>
         s
@@ -47,46 +61,45 @@ function buildGroup(name: string, noun: string) {
 
 export const data = new SlashCommandBuilder()
   .setName("roles")
-  .setDescription("Manage special-assignment and regiment roles for /userinfo.")
+  .setDescription("Manage regiment, special-assignment, and imperial-honour roles for /userinfo.")
   .setDMPermission(false)
+  .addSubcommandGroup(buildGroup("regiment", "regiment"))
   .addSubcommandGroup(buildGroup("special-assignment", "special assignment"))
-  .addSubcommandGroup(buildGroup("regiment", "regiment"));
+  .addSubcommandGroup(buildGroup("imperial-honour", "imperial honour"));
 
 // Reads the list for a group from settings (tolerating an old file missing it).
-function getList(group: string): RoleLabel[] {
-  const s = settings!.get();
-  return group === "special-assignment" ? s.specialAssignments ?? [] : s.regiments ?? [];
+function getList(group: GroupName): RoleLabel[] {
+  const key = GROUPS[group].key;
+  return (settings!.get()[key] as RoleLabel[] | undefined) ?? [];
 }
 
-// Applies a change to the correct list in the settings draft.
-function setList(draft: import("../storage/types").Settings, group: string, list: RoleLabel[]): void {
-  if (group === "special-assignment") {
-    draft.specialAssignments = list;
-  } else {
-    draft.regiments = list;
-  }
+// Writes the list for a group back into the settings draft.
+function setList(draft: Settings, group: GroupName, list: RoleLabel[]): void {
+  (draft[GROUPS[group].key] as RoleLabel[]) = list;
+}
+
+// Formats one entry for the `list` reply, marking deleted roles.
+function formatEntry(interaction: ChatInputCommandInteraction, entry: RoleLabel): string {
+  const role = interaction.guild?.roles.cache.get(entry.roleId);
+  const mention = role ? `<@&${entry.roleId}>` : `\`${entry.roleId}\` (deleted role)`;
+  const prefix = entry.emoji ? `${entry.emoji} ` : "";
+  return `${mention} — ${prefix}${entry.label}`;
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!settings) {
     return;
   }
-  const group = interaction.options.getSubcommandGroup(true);
+  const group = interaction.options.getSubcommandGroup(true) as GroupName;
   const sub = interaction.options.getSubcommand();
-  const noun = group === "special-assignment" ? "special assignment" : "regiment";
+  const noun = GROUPS[group].noun;
 
   if (sub === "list") {
     const list = getList(group);
     const text =
       list.length === 0
         ? `_No ${noun} roles configured._`
-        : list
-            .map((entry) => {
-              const role = interaction.guild?.roles.cache.get(entry.roleId);
-              const shown = role ? `<@&${entry.roleId}>` : `\`${entry.roleId}\` (deleted role)`;
-              return `${shown} — ${entry.label}`;
-            })
-            .join("\n");
+        : list.map((entry) => formatEntry(interaction, entry)).join("\n");
     await interaction.reply({
       embeds: [successEmbed(`${capitalise(noun)} roles`, text)],
       flags: MessageFlags.Ephemeral,
@@ -98,6 +111,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (sub === "add") {
     const label = interaction.options.getString("label") ?? role.name;
+    const emoji = interaction.options.getString("emoji");
     if (getList(group).some((entry) => entry.roleId === role.id)) {
       await interaction.reply({
         embeds: [warnEmbed("Already added", `<@&${role.id}> is already a ${noun} role.`)],
@@ -106,12 +120,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       return;
     }
     await settings.update((draft) => {
-      const list = group === "special-assignment" ? draft.specialAssignments ?? [] : draft.regiments ?? [];
-      list.push({ roleId: role.id, label });
+      const list = getListFromDraft(draft, group);
+      list.push({ roleId: role.id, label, emoji: emoji ?? null });
       setList(draft, group, list);
     });
+    const shown = emoji ? `${emoji} ${label}` : label;
     await interaction.reply({
-      embeds: [successEmbed(`${capitalise(noun)} added`, `<@&${role.id}> will show as "${label}".`)],
+      embeds: [successEmbed(`${capitalise(noun)} added`, `<@&${role.id}> will show as "${shown}".`)],
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -119,9 +134,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (sub === "remove") {
     await settings.update((draft) => {
-      const list = (group === "special-assignment" ? draft.specialAssignments ?? [] : draft.regiments ?? []).filter(
-        (entry) => entry.roleId !== role.id,
-      );
+      const list = getListFromDraft(draft, group).filter((entry) => entry.roleId !== role.id);
       setList(draft, group, list);
     });
     await interaction.reply({
@@ -130,6 +143,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     });
     return;
   }
+}
+
+// Reads a group's list from a settings draft (for use inside update()).
+function getListFromDraft(draft: Settings, group: GroupName): RoleLabel[] {
+  return (draft[GROUPS[group].key] as RoleLabel[] | undefined) ?? [];
 }
 
 // Capitalises the first letter of a label for embed titles.

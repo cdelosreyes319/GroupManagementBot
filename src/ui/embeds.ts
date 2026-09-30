@@ -4,14 +4,12 @@
 import { EmbedBuilder } from "discord.js";
 import type { RobloxAccount } from "../services/robloxAccount";
 import { truncate } from "../utils/text";
-
-// One place for the bot's colour palette (decimal RGB values).
-export const COLORS = {
-  success: 0x2ecc71,
-  warn: 0xf1c40f,
-  error: 0xe74c3c,
-  info: 0x3498db,
-} as const;
+import {
+  THEME_COLORS,
+  THEME_ICONS,
+  POLL_ICONS,
+  USERINFO_SECTION_EMOJIS,
+} from "../config/theme";
 
 const FOOTER_TEXT = "GroupManagementBot";
 
@@ -22,7 +20,7 @@ function baseEmbed(color: number): EmbedBuilder {
 
 // A green success embed with a check icon in the title.
 export function successEmbed(title: string, description?: string): EmbedBuilder {
-  const embed = baseEmbed(COLORS.success).setTitle(`✅ ${title}`);
+  const embed = baseEmbed(THEME_COLORS.success).setTitle(`${THEME_ICONS.success} ${title}`);
   if (description) {
     embed.setDescription(description);
   }
@@ -31,7 +29,7 @@ export function successEmbed(title: string, description?: string): EmbedBuilder 
 
 // A yellow warning embed with a warning icon in the title.
 export function warnEmbed(title: string, description?: string): EmbedBuilder {
-  const embed = baseEmbed(COLORS.warn).setTitle(`⚠️ ${title}`);
+  const embed = baseEmbed(THEME_COLORS.warn).setTitle(`${THEME_ICONS.warn} ${title}`);
   if (description) {
     embed.setDescription(description);
   }
@@ -40,7 +38,7 @@ export function warnEmbed(title: string, description?: string): EmbedBuilder {
 
 // A red error embed with a cross icon in the title.
 export function errorEmbed(title: string, description?: string): EmbedBuilder {
-  const embed = baseEmbed(COLORS.error).setTitle(`❌ ${title}`);
+  const embed = baseEmbed(THEME_COLORS.error).setTitle(`${THEME_ICONS.error} ${title}`);
   if (description) {
     embed.setDescription(description);
   }
@@ -58,12 +56,12 @@ export type PollSummaryLines = {
 
 // Builds the attendance poll summary embed posted in the results channel.
 export function buildPollSummaryEmbed(title: string, lines: PollSummaryLines): EmbedBuilder {
-  return baseEmbed(COLORS.info)
+  return baseEmbed(THEME_COLORS.pollSummary)
     .setTitle(`Attendance: ${title}`)
     .addFields(
-      { name: "✅ Attending", value: lines.yes || "0" },
-      { name: "🤔 Maybe", value: lines.maybe || "0" },
-      { name: "❌ Can't attend", value: lines.no || "0" },
+      { name: `${POLL_ICONS.yes} Attending`, value: lines.yes || "0" },
+      { name: `${POLL_ICONS.maybe} Maybe`, value: lines.maybe || "0" },
+      { name: `${POLL_ICONS.no} Can't attend`, value: lines.no || "0" },
       { name: "No answer", value: String(lines.noAnswer), inline: true },
       { name: "DM failed", value: String(lines.dmFailed), inline: true },
     );
@@ -77,7 +75,7 @@ export function buildEventDmEmbed(
   officerName: string,
   serverName: string,
 ): EmbedBuilder {
-  return baseEmbed(COLORS.info)
+  return baseEmbed(THEME_COLORS.eventDm)
     .setTitle(title)
     .setDescription(message)
     .setFooter({ text: `Sent by ${officerName} from ${serverName}` });
@@ -90,29 +88,62 @@ export type GroupRankLine = { label: string; rankName: string };
 // rendered two-line table, and an optional "matched by old name" note.
 export type UserInfoTable = { sourceName: string; table: string; matchedNote: string | null };
 
+// One displayed role on the /userinfo card: a label and an optional emoji.
+export type DisplayedRole = { label: string; emoji: string | null };
+
+// Prefixes a heading with a themed section emoji when one is configured.
+function heading(sectionEmoji: string, text: string): string {
+  return sectionEmoji ? `${sectionEmoji} **${text}:**` : `**${text}:**`;
+}
+
+// Renders a section as bullet points, one per role, with the entry's emoji
+// prefixed when set. Shows "None" when the member holds no roles in the section.
+function bulletSection(sectionEmoji: string, text: string, roles: DisplayedRole[]): string {
+  if (roles.length === 0) {
+    return `${heading(sectionEmoji, text)} None`;
+  }
+  const items = roles
+    .map((r) => (r.emoji ? `- ${r.emoji} ${r.label}` : `- ${r.label}`))
+    .join("\n");
+  return `${heading(sectionEmoji, text)}\n${items}`;
+}
+
 // Builds the single /userinfo card: avatar thumbnail, a description listing the
-// group ranks, special assignments and regiment(s), and one field per source
-// table (bold source name + aligned two-line table). Matches the grid layout in
+// group ranks then regiments, special assignments and imperial honours (each as
+// a bulleted list), and one field per source table. Matches the grid layout in
 // the design: thumbnail + info list on top, tables stacked below.
 export function buildUserInfoCard(input: {
   username: string;
   profileUrl: string;
   headshotUrl: string | null;
   ranks: GroupRankLine[];
-  specialAssignments: string[];
-  regiments: string[];
+  regiments: DisplayedRole[];
+  specialAssignments: DisplayedRole[];
+  imperialHonours: DisplayedRole[];
   tables: UserInfoTable[];
 }): EmbedBuilder {
+  // Rank lines: the first is Empire Français, the second Neuvième Corps (the
+  // fixed MANAGED_GROUPS order), so their section emojis map by index.
+  const rankEmojis = [
+    USERINFO_SECTION_EMOJIS.empireFrancaisRank,
+    USERINFO_SECTION_EMOJIS.neuviemeCorpsRank,
+  ];
+  const rankLines = input.ranks.map((r, i) => {
+    const emoji = rankEmojis[i] ? `${rankEmojis[i]} ` : "";
+    return `${emoji}**${r.label}:** ${r.rankName}`;
+  });
+
   const description = [
-    ...input.ranks.map((r) => `**${r.label}:** ${r.rankName}`),
-    `**Special assignments:** ${input.specialAssignments.length > 0 ? input.specialAssignments.join(", ") : "None"}`,
-    `**Regiment(s):** ${input.regiments.length > 0 ? input.regiments.join(", ") : "None"}`,
+    ...rankLines,
+    bulletSection(USERINFO_SECTION_EMOJIS.regiments, "Regiment(s)", input.regiments),
+    bulletSection(USERINFO_SECTION_EMOJIS.specialAssignments, "Special assignments", input.specialAssignments),
+    bulletSection(USERINFO_SECTION_EMOJIS.imperialHonours, "Imperial Honours", input.imperialHonours),
   ].join("\n");
 
-  const embed = baseEmbed(COLORS.info)
+  const embed = baseEmbed(THEME_COLORS.userInfo)
     .setTitle(input.username)
     .setURL(input.profileUrl)
-    .setDescription(description);
+    .setDescription(truncate(description, 4096));
 
   if (input.headshotUrl) {
     embed.setThumbnail(input.headshotUrl);
@@ -134,7 +165,7 @@ export function buildRobloxInfoEmbed(
   ranks: GroupRankLine[],
   headshotUrl: string | null,
 ): EmbedBuilder {
-  const embed = baseEmbed(COLORS.info)
+  const embed = baseEmbed(THEME_COLORS.userInfo)
     .setTitle(account.username)
     .setURL(account.profileUrl)
     .addFields({ name: "Roblox ID", value: String(account.userId), inline: true });
