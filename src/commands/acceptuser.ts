@@ -1,73 +1,80 @@
-// Accept User
-// **********
-// Arguments
-// **********
-// discordUser : Mention of user
-// **********
-// TODO
-// 1. Parse mention into usable user data
-// 2. Match user to bloxlink database
-// 3. Accept user in both Neuvieme and Main groups if pending
-// 4. Read back membership status of user in both groups
-import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
-import { groups, env } from "../init";
-import * as noblox from "noblox.js";
+// /accept
+// Arguments: user (Discord user)
+// Access: configurable
+// What it does: accepts a member's pending join request into both managed
+// Roblox groups, or reports their existing membership status. Sends one reply.
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  MessageFlags,
+} from "discord.js";
+import type { AccessLevel } from "./types";
+import { MANAGED_GROUPS } from "../config/constants";
+import { getAccountLookup } from "../services/accountLookup";
+import { getRankInGroup, hasJoinRequest, handleJoinRequest } from "../api/roblox";
+import { successEmbed, warnEmbed } from "../ui/embeds";
+import { MESSAGES } from "../ui/messages";
+
+export const access: AccessLevel = "configurable";
 
 export const data = new SlashCommandBuilder()
   .setName("accept")
-  .setDescription("Check & automatically accept user into corps & main groups.")
-  .addUserOption((option) => option.setName('user').setDescription('Username of individual.').setRequired(true));
+  .setDescription("Check & automatically accept a user into the corps & main groups.")
+  .setDMPermission(false)
+  .addUserOption((option) =>
+    option.setName("user").setDescription("The Discord user to accept.").setRequired(true),
+  );
 
-export async function execute(interaction: ChatInputCommandInteraction) {
-    const user = interaction.options.getUser('user');
-    if (user == null)
-        return interaction.reply({content: 'User not found!', flags: MessageFlags.Ephemeral})
+// Processes one managed group and returns a single result line for the reply.
+async function acceptIntoGroup(
+  groupLabel: string,
+  groupId: number,
+  robloxUserId: number,
+  displayName: string,
+): Promise<string> {
+  const rank = await getRankInGroup(groupId, robloxUserId);
+  if (rank !== 0) {
+    return `✅ ${displayName} is already in ${groupLabel}.`;
+  }
+  if (await hasJoinRequest(groupId, robloxUserId)) {
+    await handleJoinRequest(groupId, robloxUserId, true);
+    return `✅ ${displayName} has been accepted into ${groupLabel}.`;
+  }
+  return `❌ ${displayName} has no pending join request for ${groupLabel}.`;
+}
 
-    await interaction.deferReply({flags: MessageFlags.Ephemeral});
-    const ROBLOX_MAIN_ID = parseInt(groups.ROBLOX_MAIN_ID);
-    const ROBLOX_CORPS_ID = parseInt(groups.ROBLOX_CORPS_ID);
-    try {
-      const response = await fetch(`https://api.blox.link/v4/public/guilds/${groups.DISCORD_CORPS_ID}/discord-to-roblox/${user.id}`, { headers: { "Authorization": env.BLOXLINK_KEY.toString() } });
-      const responseJSON = await response.json();
-      if (response.ok && !responseJSON.error) {
-        const robloxID = responseJSON?.robloxID;
-        
-        if (!robloxID)
-          return interaction.editReply({content: '❌Unexpected error happened! (RobloxID not found.)'});
-        if (await noblox.getRankInGroup(ROBLOX_MAIN_ID, robloxID) == 0) {
-          if (await noblox.getJoinRequest(ROBLOX_MAIN_ID, robloxID)) { 
-            await noblox.handleJoinRequest(ROBLOX_MAIN_ID, robloxID, true);
-            var msg = await interaction.fetchReply();
-            interaction.editReply({content: msg.content + `\n✅<@!${user.id}> has been accepted to the main group!`});
-          }
-          else {
-            var msg = await interaction.fetchReply();
-            interaction.editReply({content: msg.content + `\n❌<@!${user.id}> has not sent a join request to the main group!`});
-          }
-        } else {
-            var msg = await interaction.fetchReply();
-            interaction.editReply({content: msg.content + `\n✅<@!${user.id}> is already in main group!`});
-        }
-        if (await noblox.getRankInGroup(ROBLOX_CORPS_ID, robloxID) == 0) {
-          if (await noblox.getJoinRequest(ROBLOX_CORPS_ID, robloxID)) { 
-            await noblox.handleJoinRequest(ROBLOX_CORPS_ID, robloxID, true); 
-            var msg = await interaction.fetchReply();
-            interaction.editReply({content: msg.content + `\n✅<@!${user.id}> has been accepted to the corps!`});
-          }
-          else {
-            var msg = await interaction.fetchReply();
-            interaction.editReply({content: msg.content + `\n❌<@!${user.id}> has not sent a join request to the corps!`});
-          }
-        } else {
-            var msg = await interaction.fetchReply();
-            interaction.editReply({content: msg.content + `\n✅<@!${user.id}> is already in corps!`});
-        }
-      }
-      else {
-        throw new Error(responseJSON.error);
-      }
-    } catch (error) {
-      console.error(error);
-      return interaction.editReply({ content: 'Unexpected error happened! (Check console for info.)'});
+export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  const user = interaction.options.getUser("user", true);
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const lookup = await getAccountLookup()(user.id);
+  if (!lookup.ok) {
+    const text = lookup.reason === "not_linked" ? MESSAGES.notLinked : MESSAGES.bloxlinkError;
+    await interaction.editReply({ embeds: [warnEmbed("Could not resolve account", text)] });
+    return;
+  }
+
+  const account = lookup.account;
+  const lines: string[] = [];
+  try {
+    for (const group of MANAGED_GROUPS) {
+      lines.push(await acceptIntoGroup(group.label, group.id, account.userId, account.username));
     }
+  } catch (error) {
+    console.error("Accept command failed during a Roblox call:", errorMessage(error));
+    await interaction.editReply({
+      embeds: [warnEmbed("Roblox error", "A Roblox request failed. Some groups may be unchanged.")],
+    });
+    return;
+  }
+
+  const embed = successEmbed(`Accept: ${account.username}`, lines.join("\n"))
+    .setURL(account.profileUrl)
+    .addFields({ name: "Actioned by", value: `<@${interaction.user.id}>`, inline: true });
+  await interaction.editReply({ embeds: [embed] });
+}
+
+// A short, secret-free error string for logging.
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown error";
 }

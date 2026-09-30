@@ -1,8 +1,12 @@
 import { REST, Routes } from "discord.js";
 import { env, groups } from "./init";
-import { commands } from "./commands/index";
+import { commands, userContextMenus } from "./commands/index";
 
-const commandsData = Object.values(commands).map((command) => command.data);
+// Collect both slash commands and context-menu commands as JSON payloads.
+const commandsData = [
+  ...Object.values(commands).map((command) => command.data.toJSON()),
+  ...Object.values(userContextMenus).map((command) => command.data.toJSON()),
+];
 
 const rest = new REST({ version: "10" }).setToken(env.DISCORD_TOKEN);
 
