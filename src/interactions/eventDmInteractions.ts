@@ -123,9 +123,16 @@ async function handleModal(interaction: ModalSubmitInteraction): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guild = interaction.guild!;
-  await guild.members.fetch();
-  const roleMembers = guild.roles.cache.get(draft.roleId)?.members;
-  const candidates: Candidate[] = [...(roleMembers?.values() ?? [])].map((member) => ({
+  // Filter the collection fetch() returns rather than reading role.members from
+  // the cache: the member cache is capped (GuildMemberManager in main.ts), so
+  // role.members can be empty on servers with more members than the cap. The
+  // @everyone role (id === guild id) matches every member.
+  const fetched = await guild.members.fetch();
+  const roleMembers =
+    draft.roleId === guild.id
+      ? fetched
+      : fetched.filter((member) => member.roles.cache.has(draft.roleId));
+  const candidates: Candidate[] = [...roleMembers.values()].map((member) => ({
     id: member.id,
     isBot: member.user.bot,
     roleIds: [...member.roles.cache.keys()],
