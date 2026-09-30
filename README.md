@@ -10,7 +10,8 @@ The bot links Discord users to their Roblox accounts through Bloxlink, ranks
 members in either group (with automatic EF → Corps rank sync **and** Discord
 rank-role sync), sends event DMs with an optional attendance poll, shows a
 player info card fed by officers' Google Sheets, and logs every command run to a
-channel of your choice.
+channel of your choice. Slash-command descriptions are localized in English and
+Chinese Simplified.
 
 ## Commands
 
@@ -26,7 +27,7 @@ channel of your choice.
 | `/userinfo` | configurable | Shows a player's info card: ranks, assignments, regiments, and per-source stat tables. |
 | `/stats-source` | configurable | Manages Google Sheet stats sources and their display fields. |
 | `/stats-alias` | configurable | Manages a player's manual sheet-name aliases. |
-| `/roles` | configurable | Manages the special-assignment and regiment roles shown on `/userinfo`. |
+| `/roles` | configurable | Manages the regiment, special-assignment, and imperial-honour roles shown on `/userinfo`. |
 | `/permissions` | admin | Manages which roles may run each configurable command. |
 | `/log` | admin | Sets or shows the channel that command runs are logged to. |
 
@@ -120,23 +121,27 @@ command use. Only user IDs and timestamps are stored — never message content.
 `/userinfo` shows one embed laid out like a grid:
 
 - the player's Roblox avatar as the thumbnail;
-- a vertical list of their Empire Français rank, Neuvième Corps rank, special
-  assignments, and regiment(s);
+- a vertical list, in order: Empire Français rank, Neuvième Corps rank,
+  regiment(s), special assignments, and imperial honours. The last three render
+  as bullet-point lists;
 - one small table per Stats Source the player appears in, titled with the
   source's display name, with a header row of column labels and a single data
   row for that player. Players found in several sheets get one table each.
 
-### Special assignments and regiments
+### Regiments, special assignments, and imperial honours
 
-`/userinfo` shows the labels of any configured Discord roles the member holds:
+`/userinfo` shows the labels of any configured Discord roles the member holds,
+across three lists managed with `/roles`:
 
-- **Special assignments** are one-off roles like Eagle Bearer or Regimental
-  Drummer. Manage them with `/roles special-assignment add|remove|list`.
-- **Regiments** are the corps's regiment roles; a member may hold several.
-  Manage them with `/roles regiment add|remove|list`.
+- **Regiments** — `/roles regiment add|remove|list`. A member may hold several.
+- **Special assignments** — `/roles special-assignment add|remove|list` (one-off
+  roles like Eagle Bearer or Regimental Drummer).
+- **Imperial honours** — `/roles imperial-honour add|remove|list`.
 - When adding, the label defaults to the Discord role's name; pass a `label` to
-  override it. Both lists are stored in settings and apply to the next
-  `/userinfo` without a restart. A member with none shows "None".
+  override it, and an optional `emoji` (unicode or a custom `<:name:id>`) to show
+  before the label (for example `- 🦅 Porte-Aigle`). The lists are stored in
+  settings and apply to the next `/userinfo` without a restart. A member with
+  none in a section shows "None".
 
 ### Stats sources (Google Sheets)
 
@@ -174,6 +179,37 @@ command name, who ran it, where, the time, and a summary of the options.
   bot only posts to it and never manages it. Logging never mentions anyone,
   never blocks a command, and is skipped silently if no channel is set or the
   channel is unreachable.
+
+## Appearance (theme)
+
+The look of the **fixed** embeds is collected in **`src/config/theme.ts`** (data
+only) so you can beautify them without touching logic:
+
+- accent colours per embed type (success, warning, error, info, the `/userinfo`
+  card, the poll summary, the event-DM embed);
+- the title icons on success/warning/error embeds and the poll answer icons;
+- the section emojis on the `/userinfo` card (before the EF rank, Corps rank,
+  regiments, special assignments, and imperial honours headings). Set one to an
+  empty string for no emoji.
+
+Editing that file changes the look with no other code changes. The dynamic stats
+tables are intentionally **not** themed here; the per-role emojis in the three
+role lists come from `/roles`, not the theme.
+
+## Localization
+
+Slash-command **descriptions** (command and option descriptions) are localized
+through Discord's native localization, sourced from **`src/i18n/localizations.ts`**.
+English is the default; Chinese Simplified (`zh-CN`) is provided, and Discord
+falls back to English wherever a translation is missing.
+
+- Add another Discord-supported locale by adding its entries in that file — no
+  logic changes. (Tagalog is not a Discord locale, so it cannot be added.)
+- Command **names**, modal titles/labels, button labels, embed and reply
+  content, and sheet data are not localized (Discord cannot localize the latter
+  three, and localizing command names would change how members invoke them).
+- Localizations are applied when commands are registered, so run
+  `npm run deploy-commands` after editing the localization files.
 
 ## Data storage
 

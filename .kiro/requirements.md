@@ -327,13 +327,16 @@ The `/userinfo` reply is **one embed** arranged to read like a two-row grid:
 
 - **Top row, left:** the player's Roblox avatar as the embed thumbnail. (Discord renders the thumbnail in the
   top corner of the embed; it is the closest native equivalent to a top-left photo.)
-- **Top row, right:** a vertical information list in the embed description:
-  - rank in Empire Français,
-  - rank in Neuvième Corps,
-  - **Special assignments** — any of the member's Discord roles that match the configured special-assignment
-    list (Requirement 16), shown by their configured labels (for example "Eagle Bearer", "Regimental Drummer"),
-  - **Regiment(s)** — any of the member's Discord roles that match the configured regiment list
-    (Requirement 16); a member may hold more than one.
+- **Top row, right:** a vertical information list in the embed description, in this exact order:
+  1. rank in Empire Français,
+  2. rank in Neuvième Corps,
+  3. **Regiment(s)** — the member's roles from the configured regiment list (Requirement 16); may be several,
+  4. **Special assignments** — the member's roles from the configured special-assignment list (Requirement 16),
+  5. **Imperial Honours** — the member's roles from the configured imperial-honours list (Requirement 16).
+
+  The regiment, special-assignment, and imperial-honour entries SHALL each render as a bullet-point list, one
+  item per role, with the entry's configured emoji shown before its label when one is set (for example
+  `- 🦅 Porte-Aigle`).
 - **Bottom row (spans the full width):** one small table per Stats Source the player was found in. Each table
   is a field whose **name is the source's custom display name in bold** and whose value is a compact two-line
   table (a header row of column labels and a single data row for that player) rendered so the columns line up.
@@ -346,7 +349,8 @@ The `/userinfo` reply is **one embed** arranged to read like a two-row grid:
 2. IF `source` is omitted THEN the system SHALL query every enabled Stats Source, at most 3 at a time, and
    include one table for each source that contains the player.
 3. WHEN the info card is built THEN it SHALL be a single embed containing the avatar thumbnail, the vertical
-   information list (EF rank, Corps rank, special assignments, regiments), and one table per matching source.
+   information list in the order EF rank, Corps rank, regiments, special assignments, imperial honours, and one
+   table per matching source.
 4. WHEN a source table is rendered THEN its header row SHALL be the configured field labels in the configured
    order and its data row SHALL be that player's values; the table SHALL be titled with the source's custom
    display name in bold.
@@ -359,8 +363,8 @@ The `/userinfo` reply is **one embed** arranged to read like a two-row grid:
 8. IF a configured field value is blank in the sheet THEN the system SHALL show "—" in that table cell.
 9. IF the card would exceed Discord's embed limits THEN the system SHALL truncate values (and, if needed, drop
    the least-important tables) instead of failing.
-10. WHEN a member has no special assignments or is in no listed regiment THEN the system SHALL show "None" for
-    that line rather than omitting it.
+10. WHEN a member holds no roles in one of the three lists (regiments, special assignments, imperial honours)
+    THEN the system SHALL show "None" for that section rather than omitting it.
 11. WHEN a member runs `/userinfo` THEN the system SHALL require the `configurable` access level.
 12. WHEN `/userinfo` replies THEN the reply SHALL be public (not ephemeral) so everyone in the channel can see
     the card (see Requirement 2.5).
@@ -465,28 +469,31 @@ secure, light and safe to deploy.
 5. WHEN a command file is written THEN it SHALL start with a short header comment stating name, arguments,
    access level, and what it does.
 
-### Requirement 16: Special-assignment and regiment role lists
+### Requirement 16: Displayed role lists (regiments, special assignments, imperial honours)
 
-**User Story:** As an officer, I want the bot to know which Discord roles denote special assignments (such as
-Eagle Bearer or Regimental Drummer) and which denote regiments, so that `/userinfo` can show them and I can
-change the lists from Discord without touching the codebase.
+**User Story:** As an officer, I want the bot to know which Discord roles denote regiments, special assignments
+(such as Eagle Bearer or Regimental Drummer), and imperial honours, each with an optional emoji, so that
+`/userinfo` can show them nicely and I can change the lists from Discord without touching the codebase.
 
 #### Acceptance Criteria
 
-1. WHEN an officer manages special assignments THEN the system SHALL provide a command to `add`, `remove`, and
-   `list` special-assignment entries, where each entry pairs a Discord role with a display label.
-2. WHEN an officer manages regiments THEN the system SHALL provide a command to `add`, `remove`, and `list`
-   regiment entries, where each entry pairs a Discord role with a display label.
+1. WHEN an officer manages a displayed role list THEN the system SHALL provide, for each of the three lists
+   (regiments, special assignments, imperial honours), a way to `add`, `remove`, and `list` entries, where each
+   entry pairs a Discord role with a display label and an optional emoji.
+2. WHEN an officer adds an entry THEN the system SHALL accept an optional emoji (a unicode emoji or a custom
+   Discord emoji such as `<:name:id>`) to be shown before the label on `/userinfo`.
 3. WHEN a label is omitted while adding THEN the system SHALL use the Discord role's current name as the label.
 4. WHEN the lists are stored THEN they SHALL live in the settings store (not the codebase) so changes apply to
    the very next `/userinfo` without a restart.
-5. WHEN `/userinfo` builds the card THEN it SHALL show, for the target member, the labels of every configured
-   special-assignment role and every configured regiment role that the member holds.
-6. IF a member holds more than one regiment role THEN the system SHALL list all of them.
+5. WHEN `/userinfo` builds the card THEN it SHALL show, for the target member, every configured regiment,
+   special-assignment, and imperial-honour role that the member holds, each as a bullet-point list item prefixed
+   with its emoji when one is set (for example `- 🦅 Porte-Aigle`).
+6. IF a member holds more than one role in a list THEN the system SHALL list all of them.
 7. WHEN a `list` subcommand runs THEN it SHALL mark any entry whose Discord role no longer exists as
    "deleted role", and the system SHALL ignore deleted roles when building `/userinfo`.
 8. WHEN a member runs these role-list commands THEN the system SHALL require the `configurable` access level.
-9. WHEN a secret would never be involved THEN these commands SHALL store only role IDs and plain labels.
+9. WHEN a secret would never be involved THEN these commands SHALL store only role IDs, plain labels, and the
+   optional emoji string.
 
 ### Requirement 17: Command execution logging to a channel
 
@@ -519,3 +526,66 @@ that I have an audit trail of who did what without reading the server logs.
     logging bots such as Dyno; the bot only posts and never manages the channel).
 11. WHEN command logging runs THEN it SHALL NOT block or delay the command's own reply (logging happens
     alongside, and a logging failure never changes the command result).
+
+### Requirement 18: Command localization (English + Chinese Simplified)
+
+**User Story:** As a member of a multilingual guild, I want the bot's slash commands to appear in my Discord
+language, so that English and Chinese-speaking players can both read what a command does.
+
+#### Acceptance Criteria
+
+1. WHEN commands are registered THEN the system SHALL provide localizations for command names, option names,
+   command and option descriptions, and string-choice names using Discord's native localization
+   (`setNameLocalizations` / `setDescriptionLocalizations` and the equivalents), sourced from localization
+   files in the repository.
+2. WHEN the seed languages are provided THEN the system SHALL include English (the default) and Chinese
+   Simplified (`zh-CN`). The framework SHALL make adding another Discord-supported locale a matter of adding a
+   file, not changing logic.
+3. IF a localization is missing for a locale THEN Discord SHALL fall back to the default (English) value; the
+   system SHALL NOT require every string to be translated in every locale.
+4. WHEN a language choice is needed THEN it SHALL be settled in the repository's localization files; there
+   SHALL be no runtime command to change languages and no per-user or per-guild language storage.
+5. WHEN a description is written THEN it SHALL be reasonably in-depth (a clear sentence) but concise, since it
+   is now user-facing across languages and within Discord's length limits.
+6. WHEN a string cannot be localized through Discord's native mechanism (modal titles and text-input labels,
+   button labels, embed and reply content, and sheet/stats data) THEN the system SHALL leave it in English;
+   these are out of scope for localization.
+7. WHEN a locale is chosen to seed THEN it SHALL be one Discord actually supports; Tagalog is noted as
+   unsupported by Discord and is therefore excluded.
+
+### Requirement 19: Themeable fixed embeds
+
+**User Story:** As the maintainer, I want the look of the fixed embed messages (colours, title icons, and the
+`/userinfo` card's section emojis) collected in one place, so that I can beautify them without hunting through
+the code.
+
+#### Acceptance Criteria
+
+1. WHEN a fixed embed is built (success, warning, error, info, the poll summary, the event-DM embed, the
+   Roblox-info embed, and the `/userinfo` card) THEN it SHALL take its accent colour and title icon from a
+   single theme configuration file rather than from literals scattered in the code.
+2. WHEN the `/userinfo` card is built THEN the emoji shown before each section heading (EF rank, Corps rank,
+   regiments, special assignments, imperial honours) SHALL be configurable in the theme file.
+3. WHEN the theme file is edited THEN no other code SHALL need to change for the new colours, icons, or section
+   emojis to take effect.
+4. WHEN the dynamic stats tables are rendered THEN they SHALL remain out of scope for theming; only fixed
+   embeds and the fixed sections of the `/userinfo` card are themeable. (Per-role emojis in the regiment,
+   special-assignment, and imperial-honour lists come from those lists, not the theme — see Requirement 16.)
+5. WHEN the theme file provides a value THEN it SHALL be data only (colours, emoji strings, icon strings), with
+   no logic, so it is safe for a junior maintainer to edit.
+
+### Requirement 20: Imperial Honours role list
+
+**User Story:** As an officer, I want a third displayed role list for imperial honours, managed the same way as
+special assignments, so that honours a member holds show on their `/userinfo` card.
+
+#### Acceptance Criteria
+
+1. WHEN an officer manages imperial honours THEN the system SHALL provide `add`, `remove`, and `list` for
+   imperial-honour entries, each pairing a Discord role with a display label and an optional emoji, exactly as
+   for special assignments and regiments (Requirement 16).
+2. WHEN `/userinfo` builds the card THEN the imperial-honours section SHALL appear last in the information list
+   (after special assignments) and follow the same bullet-point and emoji rules as the other two lists.
+3. WHEN a member holds no imperial-honour roles THEN the section SHALL show "None".
+4. WHEN a member runs the imperial-honours role-list command THEN the system SHALL require the `configurable`
+   access level.

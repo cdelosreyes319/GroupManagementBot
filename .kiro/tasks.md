@@ -250,3 +250,35 @@
 
 - [x] 21. Checkpoint - typecheck, tests, build, and re-deploy commands
   - Run `npm run typecheck`, `npm run tests`, `npm run build`; fix any failures. Re-run `npm run deploy-commands` because a new `/log` command was added.
+
+- [x] 22. Per-role emoji, Imperial Honours, and reordered/bulleted /userinfo
+  - [x] 22.1 Extend the role-list storage
+    - Change `RoleLabel` in `src/storage/types.ts` to `{ roleId: string; label: string; emoji: string | null }`, and add `imperialHonours: RoleLabel[]` to `Settings` with a default of `[]`. Keep `specialAssignments` and `regiments`. Update the settings-store test defaults.
+    - _Requirements: 16.1, 16.9, 20.1, 13.7_
+  - [x] 22.2 `/roles` gains emoji + imperial-honour group
+    - Add an optional `emoji` string option to every `add` subcommand. Add a third subcommand group `imperial-honour` with `add|remove|list`, mirroring the others. Store the emoji (or null). `list` shows the emoji before the label and marks deleted roles.
+    - _Requirements: 16.1, 16.2, 16.3, 16.7, 20.1, 20.4_
+  - [x] 22.3 Rework the /userinfo card sections
+    - In `buildUserInfoCard` (`ui/embeds.ts`) and `userinfo.ts`, render the info list in the order EF rank, Corps rank, Regiments, Special assignments, Imperial Honours. The three role lists render as bullet points (one per role) with the entry's emoji prefixed when set, and "None" when empty. Resolve each list from the member's held roles (ignoring deleted roles).
+    - Update the card builder's inputs/types accordingly; keep the stats tables unchanged.
+    - _Requirements: 10.3, 10.10, 16.5, 16.6, 20.2, 20.3_
+
+- [x] 23. Themeable fixed embeds
+  - [x] 23.1 Theme config file
+    - Create `src/config/theme.ts` (data only): per fixed-embed-type accent colour and title icon (success, warn, error, info), plus the `/userinfo` card accent colour and the section emojis (EF rank, Corps rank, regiments, special assignments, imperial honours). Replace the `COLORS` constant and inline icons.
+    - _Requirements: 19.1, 19.2, 19.5_
+  - [x] 23.2 Read the theme in the embed builders
+    - Update `ui/embeds.ts` so `successEmbed`, `warnEmbed`, `errorEmbed`, `buildPollSummaryEmbed`, `buildEventDmEmbed`, `buildRobloxInfoEmbed`, and `buildUserInfoCard` take their colours, icons, and section emojis from `config/theme.ts`. Leave the dynamic stats tables untouched.
+    - _Requirements: 19.1, 19.3, 19.4_
+
+- [x] 24. Command localization (English + Chinese Simplified)
+  - [x] 24.1 Localization files + helper
+    - Create `src/i18n/` with an English base and a `zh-CN` file providing Discord locale maps for command/option names, descriptions, and string-choice names, keyed so each command can look up its localizations. Add a small helper to apply a localization set to a builder (names + descriptions), with English as the default/fallback.
+    - Write a test for the helper/lookup (pure): returns the right locale map, falls back to English, and never throws on a missing key.
+    - _Requirements: 18.1, 18.2, 18.3, 18.4, 18.7, 14.9_
+  - [x] 24.2 Apply localizations to every command
+    - In each command's `data` builder, apply the localizations (command name/description, option names/descriptions, choice names) from the i18n files. Rewrite English descriptions to be fuller but concise. Modals, button labels, embed/reply content, and stats data stay English.
+    - _Requirements: 18.1, 18.5, 18.6_
+
+- [x] 25. Checkpoint - typecheck, tests, build, README, re-deploy commands
+  - Run `npm run typecheck`, `npm run tests`, `npm run build`; fix any failures. Update `README.md` for localization, the theme file, Imperial Honours, per-role emojis, and the new `/userinfo` section order. Re-run `npm run deploy-commands` because command definitions and localizations changed.
