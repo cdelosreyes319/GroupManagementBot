@@ -15,6 +15,9 @@ import { configure as configureExclusionsCommand } from "./commands/eventdmexclu
 import { configure as configureStatsSourceCommand } from "./commands/statssource";
 import { configure as configureStatsAliasCommand } from "./commands/statsalias";
 import { configure as configureUserInfoCommand } from "./commands/userinfo";
+import { configure as configureRolesCommand } from "./commands/roles";
+import { configure as configureLogCommand } from "./commands/log";
+import { configureCommandLogger } from "./services/commandLoggerInstance";
 import {
   configureEventDmInteractions,
   eventDmHandler,
@@ -71,6 +74,11 @@ async function bootstrap() {
   const eventDm = configureEventDmService();
   const poll = configurePollService(eventStore, editSummaryMessage);
   configureExclusionsCommand(settingsStore);
+  // Command logging: /log command + one shared logger for the router and the
+  // event-DM confirm handler.
+  configureLogCommand(settingsStore);
+  const commandLogger = configureCommandLogger(client, settingsStore);
+
   configureEventDmInteractions({
     client,
     settings: settingsStore,
@@ -78,6 +86,7 @@ async function bootstrap() {
     activity,
     poll,
     eventStore,
+    logCommand: (entry) => commandLogger.log(entry),
   });
   componentHandlers.eventdm = eventDmHandler;
 
@@ -86,6 +95,7 @@ async function bootstrap() {
   configureStatsSourceCommand(settingsStore);
   configureStatsAliasCommand(settingsStore);
   configureUserInfoCommand(settingsStore);
+  configureRolesCommand(settingsStore);
   configureStatsSourceInteractions(settingsStore);
   componentHandlers.statssource = statsSourceHandler;
 
@@ -93,6 +103,7 @@ async function bootstrap() {
     permissions,
     componentHandlers,
     recordActivity: (userId) => recordActivity(activity, userId),
+    logCommand: (entry) => commandLogger.log(entry),
   });
   client.on("interactionCreate", (interaction) => router(interaction));
 

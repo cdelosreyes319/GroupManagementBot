@@ -11,12 +11,14 @@ import {
   type ButtonInteraction,
   type ModalSubmitInteraction,
   type RepliableInteraction,
+  type ChatInputCommandInteraction,
 } from "discord.js";
 import type { AccessLevel } from "../commands/types";
 import { commands, userContextMenus } from "../commands/index";
 import type { PermissionService } from "../services/permissionService";
 import { parseCustomId } from "./customId";
 import { MESSAGES } from "../ui/messages";
+import type { LogEntry } from "../services/commandLogger";
 
 // A handler for a button or modal interaction, keyed by its custom-ID feature.
 // `commandName` ties the handler to a command so the same permission check
@@ -32,7 +34,11 @@ export type RouterDeps = {
   permissions: PermissionService;
   componentHandlers: Record<string, ComponentHandler>;
   recordActivity?(userId: string): void;
+  logCommand?(entry: LogEntry): void;
 };
+
+// Option names that must never be logged (they carry secrets).
+const SECRET_OPTION_NAMES = new Set(["secret", "url", "token", "key"]);
 
 // The custom-ID feature prefix for RSVP poll buttons, which bypass checks.
 const RSVP_FEATURE = "eventdm";
@@ -83,6 +89,7 @@ async function dispatch(interaction: Interaction, deps: RouterDeps): Promise<voi
       return;
     }
     await command.execute(interaction);
+    logCommandRun(interaction, deps, chatInputOptionSummary(interaction));
     return;
   }
 
@@ -95,6 +102,7 @@ async function dispatch(interaction: Interaction, deps: RouterDeps): Promise<voi
       return;
     }
     await command.execute(interaction);
+    logCommandRun(interaction, deps, [`Target: ${interaction.targetUser.tag} (${interaction.targetUser.id})`]);
     return;
   }
 
@@ -180,6 +188,64 @@ async function checkPermission(
     return false;
   }
   return true;
+}
+
+// Logs a successful command run to the configured channel (fire-and-forget).
+function logCommandRun(
+  interaction: { commandName: string; user: { id: string }; channelId: string | null },
+  deps: RouterDeps,
+  detail: string[],
+): void {
+  if (!deps.logCommand) {
+    return;
+  }
+  deps.logCommand({
+    commandName: interaction.commandName,
+    runnerId: interaction.user.id,
+    channelId: interaction.channelId ?? "unknown",
+    detail,
+  });
+}
+
+// Builds a redacted "name: value" summary of a chat-input command's options,
+// skipping any option whose name suggests it carries a secret.
+function chatInputOptionSummary(interaction: ChatInputCommandInteraction): string[] {
+  const lines: string[] = [];
+  const group = interaction.options.getSubcommandGroup(false);
+  const sub = interaction.options.getSubcommand(false);
+  if (group) {
+    lines.push(`Group: ${group}`);
+  }
+  if (sub) {
+    lines.push(`Subcommand: ${sub}`);
+  }
+  // `data` holds the raw option values discord.js parsed for this interaction.
+  for (const option of interaction.options.data) {
+    collectOptions(option, lines);
+  }
+  return lines;
+}
+
+// Recursively collects option name/value lines, skipping secret-named options
+// and options that carry no simple value (subcommands/groups handled above).
+function collectOptions(
+  option: { name: string; value?: string | number | boolean; options?: readonly unknown[] },
+  lines: string[],
+): void {
+  if (option.options) {
+    for (const child of option.options) {
+      collectOptions(child as typeof option, lines);
+    }
+    return;
+  }
+  if (option.value === undefined) {
+    return;
+  }
+  if (SECRET_OPTION_NAMES.has(option.name.toLowerCase())) {
+    lines.push(`${option.name}: (hidden)`);
+    return;
+  }
+  lines.push(`${option.name}: ${String(option.value)}`);
 }
 
 // Replies with a generic ephemeral error, using followUp if already replied.

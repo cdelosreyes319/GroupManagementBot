@@ -12,6 +12,8 @@ import * as eventdmExclusions from "./eventdmexclusions";
 import * as statsSource from "./statssource";
 import * as statsAlias from "./statsalias";
 import * as userinfo from "./userinfo";
+import * as roles from "./roles";
+import * as log from "./log";
 import * as robloxInfo from "./robloxinfo";
 import type { BotCommand, UserContextMenuCommand } from "./types";
 
@@ -27,6 +29,8 @@ export const commands: Record<string, BotCommand> = {
   "stats-source": statsSource,
   "stats-alias": statsAlias,
   userinfo,
+  roles,
+  log,
 };
 
 // User context-menu commands, keyed by command name.

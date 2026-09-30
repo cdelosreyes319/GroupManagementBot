@@ -41,6 +41,36 @@ export function formatRatio(numerator: unknown, denominator: unknown): string {
   return (num / den).toFixed(2);
 }
 
+// One column of a stats table: the field's label and the player's formatted value.
+export type StatCell = { label: string; value: string };
+
+// Builds the ordered label/value cells for a player's row (one per field).
+export function buildStatCells(fields: StatField[], row: Record<string, unknown>): StatCell[] {
+  return fields.slice(0, MAX_FIELDS).map((field) => {
+    const value =
+      field.kind === "ratio"
+        ? formatRatio(row[field.numeratorHeader], row[field.denominatorHeader])
+        : formatValue(row[field.header], field.format);
+    return { label: field.label, value: value || EMPTY };
+  });
+}
+
+// Renders cells as a two-line monospace table (header row + data row) with each
+// column padded to the wider of its label and value so the columns line up.
+// Returns a fenced code block; empty when there are no cells.
+export function renderStatTable(cells: StatCell[]): string {
+  if (cells.length === 0) {
+    return "";
+  }
+  const widths = cells.map((c) => Math.max(c.label.length, c.value.length));
+  const header = cells.map((c, i) => c.label.padEnd(widths[i])).join("  ");
+  const data = cells.map((c, i) => c.value.padEnd(widths[i])).join("  ");
+  const block = `${header}\n${data}`;
+  // Keep the whole table within a Discord embed field value (1024 chars),
+  // leaving room for the code fence.
+  return "```\n" + truncate(block, MAX_VALUE - 8) + "\n```";
+}
+
 // Builds embed fields from the configured fields and a sheet row, applying
 // Discord's field-count and length limits.
 export function buildEmbedFields(

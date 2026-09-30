@@ -7,14 +7,17 @@
 import {
   SlashCommandBuilder,
   MessageFlags,
+  PermissionFlagsBits,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
+  type GuildMember,
 } from "discord.js";
 import type { AccessLevel } from "./types";
 import { MANAGED_GROUPS } from "../config/constants";
 import { getAccountLookup } from "../services/accountLookup";
 import { getRankService } from "../services/rankServiceInstance";
 import type { CorpsSyncOutcome } from "../services/rankService";
+import { computeRankRoleChange } from "../services/rankRoleService";
 import { successEmbed, warnEmbed } from "../ui/embeds";
 import { MESSAGES } from "../ui/messages";
 
@@ -64,6 +67,69 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
     await interaction.respond(choices);
   } catch {
     await interaction.respond([]);
+  }
+}
+
+// The outcome of updating the member's Discord rank role.
+type DiscordRoleOutcome =
+  | { status: "not_applicable" } // rank change was not in Empire Français, or no change
+  | { status: "no_role" } // the new EF rank has no mapped Discord role (manual ranks)
+  | { status: "unchanged" } // the member already had exactly the right rank role
+  | { status: "changed" } // the role was replaced
+  | { status: "failed"; reason: string };
+
+// Updates the member's Discord rank role: adds the new rank's role and removes
+// any other managed rank role, touching no other roles. Done directly (not via
+// Bloxlink) so it fires immediately. Never throws; returns an outcome.
+async function syncDiscordRankRole(
+  member: GuildMember | null,
+  newEfRank: number,
+): Promise<DiscordRoleOutcome> {
+  if (!member) {
+    return { status: "failed", reason: "the member is not in this Discord server" };
+  }
+
+  const change = computeRankRoleChange(newEfRank, [...member.roles.cache.keys()]);
+  if (!change.add) {
+    return { status: "no_role" };
+  }
+  if (member.roles.cache.has(change.add) && change.remove.length === 0) {
+    return { status: "unchanged" };
+  }
+
+  // Check the bot can manage roles before attempting the edit.
+  const me = member.guild.members.me;
+  if (!me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    return { status: "failed", reason: "the bot lacks the Manage Roles permission" };
+  }
+
+  try {
+    if (change.remove.length > 0) {
+      await member.roles.remove(change.remove, "rank sync");
+    }
+    await member.roles.add(change.add, "rank sync");
+    return { status: "changed" };
+  } catch {
+    return {
+      status: "failed",
+      reason: "the role may be above the bot in the role list or no longer exist",
+    };
+  }
+}
+
+// Builds a one-line summary of the Discord rank-role outcome for the reply.
+function discordRoleLine(outcome: DiscordRoleOutcome): string | null {
+  switch (outcome.status) {
+    case "not_applicable":
+      return null;
+    case "no_role":
+      return "Discord role: not changed (this rank is assigned manually).";
+    case "unchanged":
+      return "Discord role: already correct, no change.";
+    case "changed":
+      return "Discord role: updated to match the new rank.";
+    case "failed":
+      return `Discord role update failed: ${outcome.reason} (Roblox rank change kept).`;
   }
 }
 
@@ -130,6 +196,17 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     lines.push(`${groupLabel}: already ${result.main.newRankName}, no change.`);
   }
   lines.push(corpsLine(result.corps));
+
+  // Sync the Discord rank role only for an Empire Français change that happened.
+  let discordOutcome: DiscordRoleOutcome = { status: "not_applicable" };
+  if (groupKey === "main" && result.main.changed) {
+    const member = await interaction.guild!.members.fetch(user.id).catch(() => null);
+    discordOutcome = await syncDiscordRankRole(member, rankValue);
+  }
+  const roleLine = discordRoleLine(discordOutcome);
+  if (roleLine) {
+    lines.push(roleLine);
+  }
 
   const embed = successEmbed(`Rank: ${account.username}`, lines.join("\n"))
     .setURL(account.profileUrl)

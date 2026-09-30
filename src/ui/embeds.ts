@@ -3,6 +3,7 @@
 // footer and success/warning/failure icons).
 import { EmbedBuilder } from "discord.js";
 import type { RobloxAccount } from "../services/robloxAccount";
+import { truncate } from "../utils/text";
 
 // One place for the bot's colour palette (decimal RGB values).
 export const COLORS = {
@@ -85,34 +86,43 @@ export function buildEventDmEmbed(
 // A group's rank name for a player, used to build the Roblox info embed.
 export type GroupRankLine = { label: string; rankName: string };
 
-// Builds a stats card embed for one source: username (linked), headshot, group
-// ranks in the description, the configured fields, and the source name/accent.
-export function buildStatsEmbed(input: {
+// One source's table on the /userinfo card: the source's display name, the
+// rendered two-line table, and an optional "matched by old name" note.
+export type UserInfoTable = { sourceName: string; table: string; matchedNote: string | null };
+
+// Builds the single /userinfo card: avatar thumbnail, a description listing the
+// group ranks, special assignments and regiment(s), and one field per source
+// table (bold source name + aligned two-line table). Matches the grid layout in
+// the design: thumbnail + info list on top, tables stacked below.
+export function buildUserInfoCard(input: {
   username: string;
   profileUrl: string;
   headshotUrl: string | null;
   ranks: GroupRankLine[];
-  fields: { name: string; value: string; inline: boolean }[];
-  sourceName: string;
-  accentColor: number | null;
-  matchedByOldName: string | null;
+  specialAssignments: string[];
+  regiments: string[];
+  tables: UserInfoTable[];
 }): EmbedBuilder {
-  const embed = new EmbedBuilder()
-    .setColor(input.accentColor ?? COLORS.info)
+  const description = [
+    ...input.ranks.map((r) => `**${r.label}:** ${r.rankName}`),
+    `**Special assignments:** ${input.specialAssignments.length > 0 ? input.specialAssignments.join(", ") : "None"}`,
+    `**Regiment(s):** ${input.regiments.length > 0 ? input.regiments.join(", ") : "None"}`,
+  ].join("\n");
+
+  const embed = baseEmbed(COLORS.info)
     .setTitle(input.username)
     .setURL(input.profileUrl)
-    .setDescription(input.ranks.map((r) => `${r.label}: ${r.rankName}`).join(" · "));
+    .setDescription(description);
 
   if (input.headshotUrl) {
     embed.setThumbnail(input.headshotUrl);
   }
-  if (input.fields.length > 0) {
-    embed.addFields(input.fields);
+
+  // At most 25 fields per embed; each table is one field.
+  for (const t of input.tables.slice(0, 25)) {
+    const name = t.matchedNote ? `${t.sourceName} · ${t.matchedNote}` : t.sourceName;
+    embed.addFields({ name: truncate(name, 256), value: t.table || "—" });
   }
-  const footer = input.matchedByOldName
-    ? `${input.sourceName} · matched name: ${input.matchedByOldName}`
-    : input.sourceName;
-  embed.setFooter({ text: footer });
   return embed;
 }
 

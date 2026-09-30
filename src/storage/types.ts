@@ -34,12 +34,19 @@ export type StatsSource = {
 };
 
 // The bot's settings, stored in settings.json.
+// A Discord role paired with a display label, used for special assignments and
+// regiments shown on the /userinfo card.
+export type RoleLabel = { roleId: string; label: string };
+
 export type Settings = {
   version: 1;
   commandRoles: Record<string, string[]>;
   eventDmExcludedRoleIds: string[];
   statsSources: StatsSource[];
   usernameAliases: Record<string, string[]>;
+  specialAssignments: RoleLabel[];
+  regiments: RoleLabel[];
+  logChannelId: string | null;
 };
 
 // A recorded RSVP answer.
@@ -75,6 +82,9 @@ export function defaultSettings(): Settings {
     eventDmExcludedRoleIds: [],
     statsSources: [],
     usernameAliases: {},
+    specialAssignments: [],
+    regiments: [],
+    logChannelId: null,
   };
 }
 

@@ -23,6 +23,9 @@ describe("createJsonSettingsStore", () => {
       eventDmExcludedRoleIds: [],
       statsSources: [],
       usernameAliases: {},
+      specialAssignments: [],
+      regiments: [],
+      logChannelId: null,
     });
   });
 

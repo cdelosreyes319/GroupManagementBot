@@ -1,5 +1,11 @@
 import { describe, test, expect } from "vitest";
-import { formatValue, formatRatio, buildEmbedFields } from "./statsFormatter";
+import {
+  formatValue,
+  formatRatio,
+  buildEmbedFields,
+  buildStatCells,
+  renderStatTable,
+} from "./statsFormatter";
 import type { StatField } from "../storage/types";
 
 describe("formatValue", () => {
@@ -84,5 +90,53 @@ describe("buildEmbedFields", () => {
     const long = "x".repeat(2000);
     const built = buildEmbedFields(fields, { Bio: long });
     expect(built[0].value.length).toBeLessThanOrEqual(1024);
+  });
+});
+
+describe("buildStatCells", () => {
+  test("produces one label/value cell per field", () => {
+    const fields: StatField[] = [
+      { kind: "value", header: "Kills", label: "Kills", format: "number", inline: true },
+      { kind: "ratio", numeratorHeader: "Kills", denominatorHeader: "Deaths", label: "K/D", inline: true },
+    ];
+    expect(buildStatCells(fields, { Kills: 512, Deaths: 218 })).toEqual([
+      { label: "Kills", value: "512" },
+      { label: "K/D", value: "2.35" },
+    ]);
+  });
+
+  test("blank cell shows an em dash", () => {
+    const fields: StatField[] = [
+      { kind: "value", header: "Notes", label: "Notes", format: "text", inline: false },
+    ];
+    expect(buildStatCells(fields, {})).toEqual([{ label: "Notes", value: "—" }]);
+  });
+});
+
+describe("renderStatTable", () => {
+  test("returns empty string for no cells", () => {
+    expect(renderStatTable([])).toBe("");
+  });
+
+  test("aligns header and data rows in a code block", () => {
+    const table = renderStatTable([
+      { label: "Kills", value: "512" },
+      { label: "KD", value: "2.35" },
+    ]);
+    expect(table.startsWith("```\n")).toBe(true);
+    expect(table.endsWith("\n```")).toBe(true);
+    // Strip the fences and read the two content lines (header = labels, data = values).
+    const lines = table.replace(/```/g, "").replace(/^\n/, "").replace(/\n$/, "").split("\n");
+    // Column widths: "Kills"=5 vs "512"=3 -> 5; "KD"=2 vs "2.35"=4 -> 4.
+    expect(lines[0]).toBe("Kills  KD  ");
+    expect(lines[1]).toBe("512    2.35");
+  });
+
+  test("stays within the embed field value limit", () => {
+    const cells = Array.from({ length: 25 }, (_, i) => ({
+      label: `L${i}`,
+      value: "x".repeat(100),
+    }));
+    expect(renderStatTable(cells).length).toBeLessThanOrEqual(1024);
   });
 });

@@ -57,7 +57,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // Public reply so everyone in the channel can see the info.
+  await interaction.deferReply();
 
   let account: RobloxAccount | null = null;
   if (user) {

@@ -32,6 +32,7 @@ import {
   type PollSummaryLines,
 } from "../ui/embeds";
 import { formatAnswerLine } from "../services/pollService";
+import type { LogEntry } from "../services/commandLogger";
 import { truncate } from "../utils/text";
 
 // Everything the handler needs, injected at wiring time.
@@ -42,6 +43,7 @@ type Deps = {
   activity: ActivityTracker;
   poll: PollService;
   eventStore: EventStore;
+  logCommand?: (entry: LogEntry) => void;
 };
 
 let deps: Deps | null = null;
@@ -306,6 +308,23 @@ async function confirmSend(interaction: ButtonInteraction, draft: PendingBroadca
       .join("\n"),
   );
   await interaction.editReply({ embeds: [summary] });
+
+  // Log the send with full detail so a rule-breaking message can be traced.
+  // The title and message are officer-authored content, not secrets.
+  if (deps!.logCommand) {
+    deps!.logCommand({
+      commandName: "eventdm (sent)",
+      runnerId: interaction.user.id,
+      channelId: interaction.channelId ?? "unknown",
+      detail: [
+        `Role: ${draft.roleName} (${draft.roleId})`,
+        `Recipients: ${result.sent} sent, ${result.failed.length} failed`,
+        draft.resultsChannelId ? `Results channel: <#${draft.resultsChannelId}>` : "Poll: none",
+        `Title: ${title}`,
+        `Message: ${message}`,
+      ],
+    });
+  }
 }
 
 // Creates the EventRecord, posts the initial summary embed in the results

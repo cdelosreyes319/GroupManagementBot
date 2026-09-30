@@ -5,7 +5,6 @@
 import {
   ContextMenuCommandBuilder,
   ApplicationCommandType,
-  MessageFlags,
   type UserContextMenuCommandInteraction,
 } from "discord.js";
 import type { AccessLevel } from "./types";
@@ -22,7 +21,8 @@ export const data = new ContextMenuCommandBuilder()
   .setDMPermission(false);
 
 export async function execute(interaction: UserContextMenuCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // Public reply so everyone in the channel can see the info.
+  await interaction.deferReply();
 
   const lookup = await getAccountLookup()(interaction.targetUser.id);
   if (!lookup.ok) {
