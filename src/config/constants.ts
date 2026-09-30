@@ -41,7 +41,7 @@ export const LIMITS = {
   maxAliasesPerPlayer: 10,
   maxOldUsernames: 10,
 
-  eventDmMaxRecipients: 250,
+  eventDmMaxRecipients: 1000,
   eventDmDelayMs: 1200,
   eventDmCooldownMs: 5 * 60_000,
   eventDmPreviewTtlMs: 5 * 60_000,
