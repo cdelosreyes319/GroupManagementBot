@@ -30,7 +30,7 @@ export const data = new SlashCommandBuilder()
   .addIntegerOption((o) =>
     o
       .setName("limit")
-      .setDescription("Maximum recipients (1–250, default 250).")
+      .setDescription("Maximum recipients (1–1000, default 250).")
       .setMinValue(1)
       .setMaxValue(LIMITS.eventDmMaxRecipients),
   )
