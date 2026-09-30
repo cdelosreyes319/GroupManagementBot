@@ -21,6 +21,7 @@ describe("createJsonSettingsStore", () => {
       version: 1,
       commandRoles: {},
       eventDmExcludedRoleIds: [],
+      eventDmBlacklist: [],
       statsSources: [],
       usernameAliases: {},
       regiments: [],

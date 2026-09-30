@@ -9,7 +9,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import type { SettingsStore } from "../storage/settingsStore";
-import { successEmbed } from "../ui/embeds";
+import { successEmbed, errorEmbed } from "../ui/embeds";
 import { truncate } from "../utils/text";
 
 // A logged command entry. `detail` lines carry the specific, non-secret record
@@ -47,6 +47,10 @@ export function optionLine(name: string, value: string): string {
 // The logger surface used by the router and the eventdm confirm handler.
 export type CommandLogger = {
   log(entry: LogEntry): void;
+  // Posts a security alert that DOES ping @everyone. This is the single,
+  // deliberate exception to the bot's no-mentions rule, reserved for events
+  // like an auto-blacklist trip. Only ever fires in the log channel.
+  alert(text: string): void;
 };
 
 // Builds the command logger over the Discord client and settings store.
@@ -75,5 +79,30 @@ export function createCommandLogger(client: Client, settings: SettingsStore): Co
     });
   }
 
-  return { log };
+  // Posts a security alert to the log channel WITH an @everyone ping. This is
+  // the only place the bot is allowed to mention @everyone. Fire-and-forget.
+  function alert(text: string): void {
+    const channelId = settings.get().logChannelId;
+    if (!channelId) {
+      return;
+    }
+    void postAlert(channelId, text).catch(() => {
+      console.warn("Command alert post failed; the log channel may be missing or unwritable.");
+    });
+  }
+
+  // Resolves the channel and posts the alert embed with an @everyone mention.
+  async function postAlert(channelId: string, text: string): Promise<void> {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      return;
+    }
+    await (channel as TextChannel).send({
+      content: "@everyone",
+      embeds: [errorEmbed("Security alert", truncate(text, 4000))],
+      allowedMentions: { parse: ["everyone"] },
+    });
+  }
+
+  return { log, alert };
 }

@@ -87,6 +87,7 @@ async function bootstrap() {
     poll,
     eventStore,
     logCommand: (entry) => commandLogger.log(entry),
+    alertCommand: (text) => commandLogger.alert(text),
   });
   componentHandlers.eventdm = eventDmHandler;
 

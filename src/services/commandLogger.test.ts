@@ -1,5 +1,7 @@
-import { describe, test, expect } from "vitest";
-import { buildLogSummary, optionLine } from "./commandLogger";
+import { describe, test, expect, vi } from "vitest";
+import { ChannelType } from "discord.js";
+import { buildLogSummary, optionLine, createCommandLogger } from "./commandLogger";
+import type { SettingsStore } from "../storage/settingsStore";
 
 const FIXED = Date.parse("2026-01-02T03:04:05.000Z");
 
@@ -82,5 +84,46 @@ describe("optionLine", () => {
 
   test("truncates an overly long value", () => {
     expect(optionLine("Message", "x".repeat(1000)).length).toBeLessThanOrEqual(500 + "Message: ".length);
+  });
+});
+
+// Minimal fakes for the client + settings so we can assert the alert payload.
+function makeSettings(logChannelId: string | null): SettingsStore {
+  return {
+    get: () => ({ logChannelId }) as ReturnType<SettingsStore["get"]>,
+    update: async () => undefined,
+  };
+}
+
+function makeClient(send: (payload: unknown) => void) {
+  const channel = { type: ChannelType.GuildText, send: vi.fn(async (p: unknown) => send(p)) };
+  return {
+    client: { channels: { fetch: vi.fn(async () => channel) } } as never,
+    channel,
+  };
+}
+
+describe("alert (the single @everyone exception)", () => {
+  test("pings @everyone in the log channel with an alert embed", async () => {
+    let payload: Record<string, unknown> | null = null;
+    const { client, channel } = makeClient((p) => (payload = p as Record<string, unknown>));
+    const logger = createCommandLogger(client, makeSettings("log-1"));
+
+    logger.alert("Officer X exceeded the /eventdm rate limit.");
+    // alert is fire-and-forget; let the microtask flush.
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalled());
+
+    expect(payload).not.toBeNull();
+    expect(payload!.content).toBe("@everyone");
+    expect(payload!.allowedMentions).toEqual({ parse: ["everyone"] });
+  });
+
+  test("does nothing when no log channel is set", async () => {
+    const { client, channel } = makeClient(() => {});
+    const logger = createCommandLogger(client, makeSettings(null));
+    logger.alert("no channel configured");
+    // Give any stray async work a tick; nothing should be sent.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(channel.send).not.toHaveBeenCalled();
   });
 });

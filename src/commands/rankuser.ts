@@ -165,6 +165,15 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  // An officer may not rank or derank themselves (no self-promotion).
+  if (user.id === interaction.user.id) {
+    await interaction.reply({
+      embeds: [warnEmbed("Not allowed", "You cannot change your own rank. Ask another officer.")],
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const lookup = await getAccountLookup()(user.id);

@@ -46,6 +46,10 @@ export const LIMITS = {
   eventDmCooldownMs: 5 * 60_000,
   eventDmPreviewTtlMs: 5 * 60_000,
   eventDmProgressEvery: 10,
+  // Rate limit: at most this many confirmed sends per user within the rolling
+  // window. Exceeding it auto-blacklists the user from /eventdm.
+  eventDmMaxPerDay: 5,
+  eventDmRateWindowMs: 24 * 60 * 60_000,
 
   pollOpenMs: 72 * 60 * 60_000,
   pollSummaryEditGapMs: 10_000,

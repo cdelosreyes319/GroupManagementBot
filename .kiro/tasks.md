@@ -282,3 +282,16 @@
 
 - [x] 25. Checkpoint - typecheck, tests, build, README, re-deploy commands
   - Run `npm run typecheck`, `npm run tests`, `npm run build`; fix any failures. Update `README.md` for localization, the theme file, Imperial Honours, per-role emojis, and the new `/userinfo` section order. Re-run `npm run deploy-commands` because command definitions and localizations changed.
+
+- [x] 26. Misfeasor mitigations: self-rank block, admin-only hardening, eventdm rate limit
+  - In `/rank` (`src/commands/rankuser.ts`), refuse when the `user` option resolves to the officer running the command, before any Roblox or Discord change (Requirement 3.22).
+  - Add `setDefaultMemberPermissions(Administrator)` to the `admin`-only commands `/permissions` and `/log` so Discord hides them from non-administrators; the router check stays authoritative (Requirement 8.6a).
+  - Add `eventDmMaxPerDay` (5) and `eventDmRateWindowMs` (24h) to `src/config/constants.ts`.
+  - Add `eventDmBlacklist: string[]` to `Settings` and `defaultSettings()` (`src/storage/types.ts`), and to the settings-store test defaults.
+  - In `eventDmService`, track per-officer confirmed-send timestamps and add `recordSendAndCheck(userId)` returning `{ overLimit, count }` over the rolling window (Requirement 4.15).
+  - Add `alert(text)` to the command logger: the single place allowed to ping `@everyone`, posting an alert embed to the log channel (Requirement 4.16).
+  - In the eventdm confirm handler, refuse blacklisted officers up front (Requirement 4.17); after a confirmed send, record it and, if the limit is exceeded, add the officer to `eventDmBlacklist` (persisted) and fire the `@everyone` alert. Wire `alertCommand` through `main.ts`.
+  - Cover the rate limit (`eventDmService.test.ts`) and the alert path (`commandLogger.test.ts`) with tests.
+
+- [x] 27. Checkpoint - typecheck, tests, build, and re-deploy commands
+  - Run `npm run typecheck`, `npm run tests`, `npm run build`; fix any failures. Update `README.md` for the self-rank block, admin-only command hardening, and the `/eventdm` rate limit / auto-blacklist / alert. Re-run `npm run deploy-commands` because `/permissions` and `/log` command definitions changed (default member permissions).

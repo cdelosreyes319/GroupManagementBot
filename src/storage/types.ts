@@ -43,6 +43,7 @@ export type Settings = {
   version: 1;
   commandRoles: Record<string, string[]>;
   eventDmExcludedRoleIds: string[];
+  eventDmBlacklist: string[];
   statsSources: StatsSource[];
   usernameAliases: Record<string, string[]>;
   regiments: RoleLabel[];
@@ -82,6 +83,7 @@ export function defaultSettings(): Settings {
     version: 1,
     commandRoles: {},
     eventDmExcludedRoleIds: [],
+    eventDmBlacklist: [],
     statsSources: [],
     usernameAliases: {},
     regiments: [],

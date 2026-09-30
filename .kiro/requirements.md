@@ -150,6 +150,10 @@ rank people twice.
 21. WHEN the Discord rank role is synced THEN the system SHALL do this directly (add new role, remove old
     managed rank roles) rather than relying on Bloxlink's own role sync, so it fires immediately and never
     touches unmanaged roles.
+22. IF the officer targets themselves (the `user` option resolves to the officer running the command) THEN the
+    system SHALL refuse before making any Roblox or Discord change and say that officers cannot change their
+    own rank, so that no one can self-promote or self-demote. (Alt accounts are out of scope for the bot and
+    must be handled organisationally through vetting.)
 
 ### Requirement 4: Event notice DMs to a role, with confirmation
 
@@ -189,6 +193,17 @@ mass-DMing by accident.
 13. WHEN a DM is sent THEN it SHALL be an embed showing the title, the message, the sending officer's display
     name and the server name, and SHALL NOT create mentions or pings.
 14. WHEN a member runs `/eventdm` THEN the system SHALL require the `configurable` access level.
+15. WHEN an officer confirms a broadcast THEN the system SHALL count it toward a rolling per-officer rate limit
+    of at most 5 confirmed broadcasts per 24 hours (both numbers configurable in one constants file). Previews
+    that are never confirmed SHALL NOT count.
+16. IF confirming a broadcast makes the officer exceed the rate limit THEN the system SHALL add that officer to
+    a persisted per-command blacklist (stored in the settings file so it survives restarts), and SHALL post a
+    single warning in the configured log channel that pings `@everyone` and names the officer, so that
+    administrators are alerted to the misuse. This is the only place the bot is permitted to mention
+    `@everyone`.
+17. IF a blacklisted officer runs `/eventdm` THEN the system SHALL refuse before building any recipient list or
+    sending any DM, and say they are blacklisted and should contact an administrator. Removal from the
+    blacklist is manual (an administrator edits the settings file).
 
 ### Requirement 5: Optional attendance poll inside the DM
 
@@ -276,6 +291,9 @@ Discord, so that I can change who is trusted without redeploying the bot.
    commands.
 6. WHEN a member runs `/permissions` THEN the system SHALL require the `admin` access level, and it SHALL NOT be
    configurable.
+6a. WHEN an `admin`-only command is registered with Discord (currently `/permissions` and `/log`) THEN it SHALL
+    set its default member permissions to Administrator, so Discord hides it from non-administrators in the UI
+    as defence in depth. The runtime access check (criteria 2–4) remains the authoritative gate.
 7. WHEN the `@everyone` role is added to a command THEN the system SHALL treat that command as open to all
    members.
 8. WHEN permissions change THEN the system SHALL save them immediately, and the change SHALL apply to the very

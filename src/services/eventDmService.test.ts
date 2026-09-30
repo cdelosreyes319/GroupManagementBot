@@ -142,3 +142,41 @@ describe("startSend", () => {
     expect(result).toEqual({ sent: 0, failed: [] });
   });
 });
+
+describe("per-user rate limit", () => {
+  test("stays under the limit up to the maximum, then trips on the next send", () => {
+    const service = createEventDmService(makeClock().now);
+    // The first eventDmMaxPerDay sends are allowed.
+    for (let i = 1; i <= LIMITS.eventDmMaxPerDay; i++) {
+      const r = service.recordSendAndCheck("officer");
+      expect(r.count).toBe(i);
+      expect(r.overLimit).toBe(false);
+    }
+    // The next send crosses the limit.
+    const tripped = service.recordSendAndCheck("officer");
+    expect(tripped.count).toBe(LIMITS.eventDmMaxPerDay + 1);
+    expect(tripped.overLimit).toBe(true);
+  });
+
+  test("tracks each user independently", () => {
+    const service = createEventDmService(makeClock().now);
+    for (let i = 0; i < LIMITS.eventDmMaxPerDay; i++) {
+      service.recordSendAndCheck("a");
+    }
+    // A different user is unaffected by user a's sends.
+    expect(service.recordSendAndCheck("b").overLimit).toBe(false);
+  });
+
+  test("forgets sends older than the rolling window", () => {
+    const clock = makeClock();
+    const service = createEventDmService(clock.now);
+    for (let i = 0; i < LIMITS.eventDmMaxPerDay; i++) {
+      service.recordSendAndCheck("officer");
+    }
+    // After the window passes, the earlier sends no longer count.
+    clock.advance(LIMITS.eventDmRateWindowMs + 1);
+    const r = service.recordSendAndCheck("officer");
+    expect(r.count).toBe(1);
+    expect(r.overLimit).toBe(false);
+  });
+});

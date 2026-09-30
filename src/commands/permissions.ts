@@ -5,6 +5,7 @@
 import {
   SlashCommandBuilder,
   MessageFlags,
+  PermissionFlagsBits,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
 } from "discord.js";
@@ -18,6 +19,9 @@ export const data = new SlashCommandBuilder()
   .setName("permissions")
   .setDescription("Manage which roles may run configurable commands.")
   .setDMPermission(false)
+  // Defence in depth: hide the command from non-administrators in the Discord
+  // UI. The router also enforces admin access at runtime.
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand((sub) =>
     sub
       .setName("add")

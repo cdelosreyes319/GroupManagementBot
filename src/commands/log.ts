@@ -28,6 +28,8 @@ export const data = new SlashCommandBuilder()
   .setName("log")
   .setDescription("Set or show the channel where command runs are logged.")
   .setDMPermission(false)
+  // Defence in depth: hide from non-administrators; the router also enforces it.
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand((s) =>
     s
       .setName("set")

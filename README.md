@@ -38,7 +38,9 @@ Chinese Simplified.
   Discord Administrators may run it (fail-closed). Add the `@everyone` role to
   open a command to all members.
 - **admin** — Discord Administrators only; never configurable (`/permissions`,
-  `/log`).
+  `/log`). These commands also set their Discord default member permissions to
+  Administrator, so Discord hides them from non-administrators in the UI (the
+  runtime check remains the authoritative gate).
 
 **Reply visibility:** read-only information commands (`/userinfo`, `/whois`,
 "Roblox Info") reply **publicly** so everyone in the channel can see them.
@@ -85,6 +87,10 @@ Sync runs one way only: ranking someone directly in Neuvième Corps never change
 their Empire Français rank. If a member is not in the Corps, the sync is skipped
 (the bot never auto-accepts them). If a Corps sync fails, the EF change is kept.
 
+**Officers cannot rank themselves.** `/rank` refuses when the target is the
+officer running it, so no one can self-promote or self-demote. (Alternate
+accounts are outside what the bot can detect and must be handled through vetting.)
+
 ### Discord rank role
 
 An Empire Français rank change also updates the member's **Discord** rank role:
@@ -112,6 +118,13 @@ and any member holding an excluded role.
 - Supplying a `results-channel` adds **Attending / Maybe / Can't attend** buttons
   to each DM and posts a live tally in that channel. Polls stay open for 72
   hours and keep working after a restart.
+- **Rate limit and auto-blacklist.** Each officer may confirm at most **5
+  broadcasts per 24 hours** (rolling; unconfirmed previews don't count). The
+  6th trips a safeguard: the officer is added to a persisted blacklist, is
+  refused further `/eventdm` use, and the bot posts one `@everyone` alert in the
+  log channel naming them — the only place the bot ever pings `@everyone`.
+  Removal is manual (an admin edits `eventDmBlacklist` in `settings.json`). The
+  limit and window live in `src/config/constants.ts`.
 
 Member activity (who to prioritise) is tracked from messages, voice joins, and
 command use. Only user IDs and timestamps are stored — never message content.

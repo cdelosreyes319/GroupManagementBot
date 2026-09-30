@@ -44,6 +44,7 @@ type Deps = {
   poll: PollService;
   eventStore: EventStore;
   logCommand?: (entry: LogEntry) => void;
+  alertCommand?: (text: string) => void;
 };
 
 let deps: Deps | null = null;
@@ -114,6 +115,20 @@ async function handleModal(interaction: ModalSubmitInteraction): Promise<void> {
   if (!draft) {
     await interaction.reply({
       embeds: [warnEmbed("Expired", "This event preview has expired. Please run /eventdm again.")],
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Blacklisted users (tripped the rate limit) may not use /eventdm at all.
+  if (deps.settings.get().eventDmBlacklist.includes(interaction.user.id)) {
+    await interaction.reply({
+      embeds: [
+        warnEmbed(
+          "Blocked",
+          "You are blacklisted from /eventdm for exceeding the rate limit. Contact an administrator.",
+        ),
+      ],
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -324,6 +339,27 @@ async function confirmSend(interaction: ButtonInteraction, draft: PendingBroadca
         `Message: ${message}`,
       ],
     });
+  }
+
+  // Count this confirmed send toward the sender's rolling rate limit. If they
+  // exceed it, blacklist them from /eventdm (persisted) and raise an @everyone
+  // alert in the log channel so administrators can review the misuse.
+  const rate = service.recordSendAndCheck(interaction.user.id);
+  if (rate.overLimit) {
+    const userId = interaction.user.id;
+    await deps!.settings.update((draft) => {
+      if (!draft.eventDmBlacklist.includes(userId)) {
+        draft.eventDmBlacklist.push(userId);
+      }
+    });
+    if (deps!.alertCommand) {
+      deps!.alertCommand(
+        `<@${userId}> exceeded the /eventdm rate limit ` +
+          `(${rate.count} sends within ${Math.round(LIMITS.eventDmRateWindowMs / 3_600_000)}h) ` +
+          `and has been automatically blacklisted from the command. Review and remove from the ` +
+          `blacklist if this was legitimate.`,
+      );
+    }
   }
 }
 

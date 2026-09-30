@@ -44,6 +44,8 @@ export function createEventDmService(
 ) {
   const pending = new Map<string, PendingBroadcast>();
   const guildStates = new Map<string, GuildState>();
+  // Per-user confirmed-send timestamps, for the rolling rate limit.
+  const sendTimestamps = new Map<string, number[]>();
 
   // Removes expired previews whenever the map is touched.
   function pruneExpired(): void {
@@ -151,7 +153,24 @@ export function createEventDmService(
     return result;
   }
 
-  return { createDraft, get, remove, canStart, startSend };
+  // Records a confirmed send by a user and reports whether they have now
+  // exceeded the rolling per-user rate limit. Timestamps older than the window
+  // are pruned; the map is bounded by pruning empty entries.
+  function recordSendAndCheck(userId: string): { overLimit: boolean; count: number } {
+    const cutoff = now() - LIMITS.eventDmRateWindowMs;
+    const recent = (sendTimestamps.get(userId) ?? []).filter((t) => t > cutoff);
+    recent.push(now());
+    sendTimestamps.set(userId, recent);
+    // Keep the map from growing without bound: drop other users' stale entries.
+    for (const [id, times] of sendTimestamps) {
+      if (id !== userId && times.every((t) => t <= cutoff)) {
+        sendTimestamps.delete(id);
+      }
+    }
+    return { overLimit: recent.length > LIMITS.eventDmMaxPerDay, count: recent.length };
+  }
+
+  return { createDraft, get, remove, canStart, startSend, recordSendAndCheck };
 }
 
 export type EventDmService = ReturnType<typeof createEventDmService>;
