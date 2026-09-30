@@ -7,9 +7,10 @@ Napoleonic-Wars-style Roblox guild manage two Roblox groups from Discord:
 - **Neuvième Corps** — Roblox group `13206132`, the corps group.
 
 The bot links Discord users to their Roblox accounts through Bloxlink, ranks
-members in either group (with automatic EF → Corps rank sync), sends event DMs
-with an optional attendance poll, and shows player stats fed by officers'
-Google Sheets.
+members in either group (with automatic EF → Corps rank sync **and** Discord
+rank-role sync), sends event DMs with an optional attendance poll, shows a
+player info card fed by officers' Google Sheets, and logs every command run to a
+channel of your choice.
 
 ## Commands
 
@@ -19,13 +20,15 @@ Google Sheets.
 | `/accept` | configurable | Accepts a member's pending join request into both managed groups. |
 | `/whois` | configurable | Shows a player's Roblox info and ranks (by Discord user or Roblox username). |
 | `Roblox Info` (right-click) | configurable | The same info as `/whois` for the selected member. |
-| `/rank` | configurable | Sets a member's rank in a group; from EF it also syncs the Corps rank. |
+| `/rank` | configurable | Sets a member's rank in a group; from EF it also syncs the Corps rank and the Discord rank role. |
 | `/eventdm` | configurable | DMs an event notice to the most active members of a role, with an optional attendance poll. |
 | `/eventdm-exclusions` | configurable | Manages roles that never receive event DMs. |
-| `/userinfo` | configurable | Shows a player's stats card and group ranks. |
+| `/userinfo` | configurable | Shows a player's info card: ranks, assignments, regiments, and per-source stat tables. |
 | `/stats-source` | configurable | Manages Google Sheet stats sources and their display fields. |
 | `/stats-alias` | configurable | Manages a player's manual sheet-name aliases. |
+| `/roles` | configurable | Manages the special-assignment and regiment roles shown on `/userinfo`. |
 | `/permissions` | admin | Manages which roles may run each configurable command. |
+| `/log` | admin | Sets or shows the channel that command runs are logged to. |
 
 **Access levels:**
 
@@ -33,16 +36,27 @@ Google Sheets.
 - **configurable** — only roles an admin has allowed. With no roles set, only
   Discord Administrators may run it (fail-closed). Add the `@everyone` role to
   open a command to all members.
-- **admin** — Discord Administrators only; never configurable (`/permissions`).
+- **admin** — Discord Administrators only; never configurable (`/permissions`,
+  `/log`).
+
+**Reply visibility:** read-only information commands (`/userinfo`, `/whois`,
+"Roblox Info") reply **publicly** so everyone in the channel can see them.
+Commands that change or configure things reply **ephemerally** (only the runner
+sees them), since the result is visible through the information commands.
+Previews, confirmations, permission refusals, and errors are always ephemeral.
 
 ## First-time setup after deploying
 
 1. Register the slash commands (see below).
 2. As a Discord Administrator, grant access to the trusted roles, for example:
    - `/permissions add command:rank role:@Officers`
-   - Repeat for `accept`, `eventdm`, `userinfo`, and the other configurable
-     commands you want those roles to use.
+   - Repeat for `accept`, `eventdm`, `userinfo`, `roles`, and the other
+     configurable commands you want those roles to use.
    Until you do this, only Administrators can run configurable commands.
+3. Set the log channel with `/log set channel:#command-log` so command runs are
+   recorded (optional but recommended — see "Command logging" below).
+4. Configure the special-assignment and regiment roles with `/roles` so they
+   appear on `/userinfo` (see "Player info card" below).
 
 ## Rank sync (Empire Français → Neuvième Corps)
 
@@ -70,6 +84,22 @@ Sync runs one way only: ranking someone directly in Neuvième Corps never change
 their Empire Français rank. If a member is not in the Corps, the sync is skipped
 (the bot never auto-accepts them). If a Corps sync fails, the EF change is kept.
 
+### Discord rank role
+
+An Empire Français rank change also updates the member's **Discord** rank role:
+the bot adds the role that maps to the new rank and removes any other rank role
+in the managed set, touching no other roles. This is done directly by the bot
+(not through Bloxlink) so it happens immediately.
+
+- The EF-rank → Discord-role map lives in **`src/config/rankRoles.ts`** (data
+  only). It covers Citoyen (1) through Colonel (16); rank 10 (Bénéficiaire
+  d'Empire) and ranks above Colonel are intentionally unmapped and left to
+  manual assignment.
+- If the Discord role update fails (the bot lacks Manage Roles, is below the
+  role in the hierarchy, or the role was deleted), the Roblox rank change is
+  still kept and the reply says the Discord role could not be updated. Make sure
+  the bot's role sits **above** every rank role and has **Manage Roles**.
+
 ## Event DMs and exclusions
 
 `/eventdm` opens a form for a title and message, then shows a preview (recipient
@@ -85,11 +115,33 @@ and any member holding an excluded role.
 Member activity (who to prioritise) is tracked from messages, voice joins, and
 command use. Only user IDs and timestamps are stored — never message content.
 
-## Player stats (Google Sheets)
+## Player info card (`/userinfo`)
 
-`/userinfo` shows a player's stats in a card. Stats come from one or more
-**Stats Sources**, each a Google Sheet with a small web endpoint an officer
-creates inside their own sheet.
+`/userinfo` shows one embed laid out like a grid:
+
+- the player's Roblox avatar as the thumbnail;
+- a vertical list of their Empire Français rank, Neuvième Corps rank, special
+  assignments, and regiment(s);
+- one small table per Stats Source the player appears in, titled with the
+  source's display name, with a header row of column labels and a single data
+  row for that player. Players found in several sheets get one table each.
+
+### Special assignments and regiments
+
+`/userinfo` shows the labels of any configured Discord roles the member holds:
+
+- **Special assignments** are one-off roles like Eagle Bearer or Regimental
+  Drummer. Manage them with `/roles special-assignment add|remove|list`.
+- **Regiments** are the corps's regiment roles; a member may hold several.
+  Manage them with `/roles regiment add|remove|list`.
+- When adding, the label defaults to the Discord role's name; pass a `label` to
+  override it. Both lists are stored in settings and apply to the next
+  `/userinfo` without a restart. A member with none shows "None".
+
+### Stats sources (Google Sheets)
+
+Stats come from one or more **Stats Sources**, each a Google Sheet with a small
+web endpoint an officer creates inside their own sheet.
 
 > Connecting a sheet requires an officer-created Google Apps Script endpoint that
 > returns one player's row as JSON. Writing and deploying that script is
@@ -97,7 +149,8 @@ creates inside their own sheet.
 > the endpoint.
 
 - Add a source with `/stats-source add` (a form collects the endpoint URL and
-  secret so they are never typed into a channel). The bot test-calls the endpoint
+  secret so they are never typed into a channel). The `name` you give the source
+  is the title shown above its table on the card. The bot test-calls the endpoint
   and saves the source only if the call succeeds.
 - Choose which columns appear with `/stats-source field-add`,
   `field-add-ratio`, `field-remove`, `field-move`, and `field-list`.
@@ -107,6 +160,21 @@ creates inside their own sheet.
 - Secrets and full endpoint URLs are never shown or logged; only the URL host is
   displayed.
 
+## Command logging
+
+Set a log channel with `/log set channel:#command-log`; check the current one
+with `/log show`. Once set, the bot posts one entry per command run with the
+command name, who ran it, where, the time, and a summary of the options.
+
+- **`/eventdm` is logged in full** — the role, recipient counts, results
+  channel, and the exact title and message that were sent — so a rule-breaking
+  message can be traced to its sender.
+- True secrets (endpoint URLs and secrets, tokens) are never logged.
+- The log channel can be shared with other logging bots (for example Dyno); the
+  bot only posts to it and never manages it. Logging never mentions anyone,
+  never blocks a command, and is skipped silently if no channel is set or the
+  channel is unreachable.
+
 ## Data storage
 
 Runtime data is kept in three JSON files in a **`data/`** folder
@@ -114,9 +182,10 @@ Runtime data is kept in three JSON files in a **`data/`** folder
 overridden with the `DATA_DIR` environment variable.
 
 - **`data/` is git-ignored and must not be deleted or overwritten by a
-  deployment.** It holds permissions, exclusions, stats sources, saved polls, and
-  activity history. The CD step only copies build output and never touches
-  `data/`, so it survives redeploys.
+  deployment.** It holds permissions, exclusions, stats sources, special-assignment
+  and regiment role lists, the log channel, saved polls, and activity history.
+  The CD step only copies build output and never touches `data/`, so it survives
+  redeploys.
 - `settings.json` and `events.json` refuse to start the bot if they cannot be
   parsed (they are never overwritten). A corrupt `activity.json` is set aside and
   reset, because losing activity history is harmless.
@@ -124,12 +193,16 @@ overridden with the `DATA_DIR` environment variable.
 ## Development
 
 ```bash
-npm install            # install dependencies
-npm run typecheck      # tsc --noEmit
-npm run tests          # vitest (via dotenvx, decrypts .env.ci)
-npm run build          # bundle dist/main.js with tsup
-npm run dev            # run locally with tsx watch
+npm install --ignore-scripts   # install dependencies
+npm run typecheck              # tsc --noEmit
+npm run tests                  # vitest (via dotenvx, decrypts .env.ci)
+npm run build                  # bundle dist/main.js with tsup
+npm run dev                    # run locally with tsx watch
 ```
+
+Install with `--ignore-scripts`: noblox.js has a decorative `postinstall` figlet
+banner that can crash on a missing font and is not needed at runtime. CI and CD
+use the same flag.
 
 Tests need no network and no real secrets — external calls (Bloxlink, Roblox,
 Google Sheet endpoints, Discord) are replaced with fakes.
