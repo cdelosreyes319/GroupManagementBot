@@ -190,3 +190,63 @@
   - [x] 14.3 Final verification
     - Run `npm run typecheck`, `npm run tests` and `npm run build`, fix any failure, and summarise the results.
     - _Requirements: 14.8, 14.9_
+
+- [x] 15. Discord rank-role sync in `/rank`
+  - [x] 15.1 Rank-role map (data only) with tests
+    - Create `src/config/rankRoles.ts` mapping each EF rank number to a Discord role ID (Citoyen 1 … Colonel 16, using the owner-provided IDs; ranks above Colonel intentionally unmapped). Data only, no logic. Add `findRankRoleId(efRank)` in a pure helper (or in `rankSyncService`-style module) plus the full set of managed rank-role IDs.
+    - Write tests: correct role for each mapped rank, `null` for ranks above Colonel and for 0/255, and that the managed-set list matches the map values.
+    - _Requirements: 3.19_
+  - [x] 15.2 Apply the Discord rank role on an EF change
+    - In the `/rank` flow, after a successful Empire Français rank change, add the mapped Discord role to the member and remove any other role in the managed rank-role set, touching no other roles. Do this directly (guild member role edit), not via Bloxlink.
+    - Report the Discord role change (or "not changed" for unmapped ranks) in the reply, and on failure (missing role, missing Manage Roles, bot below the role) keep the Roblox change and report why.
+    - _Requirements: 3.17, 3.18, 3.20, 3.21, 2.7_
+  - [x] 15.3 Tests for the sync behaviour
+    - Unit-test the role-diff logic with a fake member: adds the new role, removes exactly the old managed rank roles, never touches unmanaged roles, and the unmapped-rank and failure paths.
+    - _Requirements: 3.17, 3.18, 3.20, 14.9_
+
+- [x] 16. Special-assignment and regiment role lists
+  - [x] 16.1 Storage for role lists
+    - Extend `src/storage/types.ts` `Settings` with `specialAssignments` and `regiments` as lists of `{ roleId, label }` (with defaults). Keep the existing storage behaviour.
+    - _Requirements: 16.4, 16.9, 13.7_
+  - [x] 16.2 Role-list command(s)
+    - Create a command (e.g. `/roles`) with subcommand groups for `special-assignment add|remove|list` and `regiment add|remove|list`, storing role IDs + labels through the settings store; label defaults to the role name when omitted; `list` marks deleted roles. Access level `configurable`. Register it.
+    - _Requirements: 16.1, 16.2, 16.3, 16.7, 16.8_
+
+- [x] 17. Rework `/userinfo` into the grid-style info card
+  - [x] 17.1 Info-card embed builder with tests
+    - Add a `buildUserInfoCard(...)` embed builder in `ui/embeds.ts`: avatar thumbnail; a description with EF rank, Corps rank, special assignments, and regiment(s) (showing "None" when empty); and one field per Stats Source whose name is the source's bold display name and whose value is a two-line aligned text table (header row + single data row) built from the configured fields.
+    - Write pure tests for the table renderer: header/data alignment, blank cell shows "—", truncation and dropping least-important tables when over Discord limits, multiple sources stack vertically.
+    - _Requirements: 10.3, 10.4, 10.8, 10.9_
+  - [x] 17.2 Rewrite `/userinfo` to the new card
+    - Update `src/commands/userinfo.ts` to read the target member's Discord roles, resolve special assignments and regiments from settings (ignoring deleted roles), gather group ranks and stats, and render one embed via `buildUserInfoCard`. Keep the source autocomplete, the searched-sources message when nothing is found, and naming of failing sources.
+    - _Requirements: 10.1, 10.2, 10.5, 10.6, 10.7, 10.10, 10.11, 16.5, 16.6_
+
+- [x] 18. Checkpoint - typecheck, tests, build, and re-deploy commands
+  - Run `npm run typecheck`, `npm run tests`, `npm run build`; fix any failures. Note that `npm run deploy-commands` must be run after this batch because command definitions changed (new `/roles` command and `/userinfo` options).
+
+- [x] 19. Public replies for information commands
+  - [x] 19.1 Make information commands reply publicly
+    - Remove `MessageFlags.Ephemeral` from the successful replies of the information commands: `/userinfo`, `/whois`, and the "Roblox Info" context menu, so everyone in the channel can see them. Keep the initial `deferReply` non-ephemeral to match.
+    - Keep permission refusals, the generic router error, and not-found/failure warnings ephemeral where they concern only the runner (the router's checks stay ephemeral).
+    - Leave change/config commands (`/accept`, `/rank`, `/permissions`, `/stats-source`, `/stats-alias`, `/eventdm`, `/eventdm-exclusions`, `/roles`) ephemeral as they are.
+    - _Requirements: 2.5, 2.5a, 2.5b, 10.12_
+
+- [x] 20. Command execution logging to a channel
+  - [x] 20.1 Store the log channel
+    - Extend `src/storage/types.ts` `Settings` with `logChannelId: string | null` (default `null`) and its default.
+    - _Requirements: 17.1, 13.7_
+  - [x] 20.2 `/log` command (admin)
+    - Create `src/commands/log.ts` with subcommands `set` (text channel) and `show` (no `clear`), `admin` access, storing `logChannelId` through the settings store. Register it. Validate the channel is a text channel the bot can post to. The channel may be a shared log channel (e.g. one Dyno also posts to); the bot only posts, never manages it.
+    - _Requirements: 17.1, 17.2, 17.8_
+  - [x] 20.3 Command logging service with tests
+    - Create `src/services/commandLogger.ts` with a pure `buildLogSummary(entry)` that formats a specific log line (command name, runner, channel, time, and per-command detail) and omits only true secrets (Stats Endpoint URL/secret, tokens), plus a `logCommand(...)` that posts the embed to the configured channel (injected client + settings), never mentions, never throws, and skips silently when no channel is set or the channel is unreachable.
+    - For `/eventdm`, the detail SHALL include the role, recipient count, results-channel (if any), and the exact title and message that were sent, so rule-breaking messages can be traced. For `/rank` and `/accept`, the detail SHALL include the target and the outcome (old→new rank, groups touched, Discord role change).
+    - Write `commandLogger.test.ts`: includes name/runner/channel/time/detail, includes the full eventdm title+message, includes rank/accept outcomes, omits secret fields, and handles commands with no detail.
+    - _Requirements: 17.3, 17.4, 17.5, 17.6, 17.7, 17.9, 17.10, 14.9_
+  - [x] 20.4 Wire logging into the router and eventdm
+    - In `src/interactions/router.ts`, after a command (chat-input or context menu) runs successfully, log a base entry (command name, runner, channel, redacted option summary). Logging is fire-and-forget: never blocks the reply, and a logging failure is caught and ignored. Wire the logger in `main.ts` bootstrap with the client and settings store.
+    - For `/eventdm`, log the send from the confirm handler with the full detail (role, counts, title, message) at Confirm time, since the title/message are only known then.
+    - _Requirements: 17.3, 17.4, 17.5, 17.6, 17.10_
+
+- [x] 21. Checkpoint - typecheck, tests, build, and re-deploy commands
+  - Run `npm run typecheck`, `npm run tests`, `npm run build`; fix any failures. Re-run `npm run deploy-commands` because a new `/log` command was added.

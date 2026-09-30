@@ -83,11 +83,18 @@ common tasks take one command.
    username, user ID, profile link, avatar headshot, and rank name in each Managed Group.
 4. WHEN an officer right-clicks a member and chooses the "Roblox Info" app THEN the system SHALL show the same
    information as `/whois`.
-5. WHEN a command result is only relevant to the officer THEN the system SHALL reply ephemerally.
+5. WHEN a command shows user information (for example `/userinfo`, `/whois`, the "Roblox Info" context menu)
+   THEN the system SHALL reply publicly (not ephemerally) so everyone in the channel can see it.
+5a. WHEN a command changes user information (for example `/accept`, `/rank`) or manages configuration (for
+   example `/permissions`, `/stats-source`, `/stats-alias`, `/eventdm-exclusions`, `/roles`) THEN the system
+   MAY reply ephemerally, because the resulting change can be viewed publicly through the information commands.
+5b. WHEN a preview, confirmation, permission refusal, or generic error is shown THEN the system SHALL reply
+   ephemerally regardless of the command type.
 6. WHEN the system replies to a command THEN it SHALL use Discord embeds with one consistent look (colour,
    footer, success/warning/failure icons) built by a shared helper.
 7. WHEN `/accept` or `/rank` changes something in Roblox THEN the reply SHALL show what changed (for example
-   "Sergent → Adjudant in Empire Français") and which officer did it.
+   "Sergent → Adjudant in Empire Français"), including any Discord rank-role change (Requirement 3.17), and
+   which officer did it.
 8. WHEN an officer runs `/accept` THEN the system SHALL keep the current behaviour (accept into both Managed
    Groups when a join request is pending, otherwise report already-a-member or no-request) and SHALL send one
    combined reply instead of repeatedly re-reading and appending to the previous message.
@@ -130,6 +137,19 @@ rank people twice.
 15. WHEN any officer adjusts the mapping THEN the change SHALL be made only by editing the single Rank Sync
     Table file (data only, no logic in that file).
 16. WHEN a member runs `/rank` THEN the system SHALL require the `configurable` access level (see Requirement 8).
+17. WHEN a rank change in Empire Français succeeds THEN the system SHALL update the member's **Discord** rank
+    role: it SHALL add the Discord role that maps to the new EF rank and remove any other Discord role in the
+    managed rank-role set, and SHALL NOT add, remove, or reorder any Discord role outside that set.
+18. WHEN the new EF rank has no mapped Discord role (ranks above Colonel, handled manually) THEN the system
+    SHALL leave the member's Discord roles unchanged and say the Discord rank role was not changed.
+19. WHEN the managed rank-role set is defined THEN it SHALL live in a single data-only file (like the Rank Sync
+    Table) mapping each EF rank number to a Discord role ID, so it is easy to edit without touching logic.
+20. IF the Discord rank role cannot be changed (the role no longer exists, or the bot lacks Manage Roles or is
+    below the role in the hierarchy) THEN the system SHALL keep the Roblox rank change, report that the Discord
+    role update failed and why, and SHALL NOT undo the Roblox change.
+21. WHEN the Discord rank role is synced THEN the system SHALL do this directly (add new role, remove old
+    managed rank roles) rather than relying on Bloxlink's own role sync, so it fires immediately and never
+    touches unmanaged roles.
 
 ### Requirement 4: Event notice DMs to a role, with confirmation
 
@@ -295,29 +315,55 @@ columns to show, so that when our sheet changes I can update the bot from Discor
 9. IF a configured header no longer exists in the sheet THEN `/stats-source test` SHALL list exactly which
    headers are missing.
 
-### Requirement 10: Player stats card
+### Requirement 10: Player info card
 
-**User Story:** As an officer or member, I want one command that shows a player's stats in a professional
-card, so that I can check promotion progress without opening the spreadsheets.
+**User Story:** As an officer or member, I want one command that shows a player's identity, roles, and
+per-regiment stats in one professional card laid out like a grid, so that I can check who someone is and how
+they are doing without opening the spreadsheets.
+
+#### Card layout (single embed, grid-like)
+
+The `/userinfo` reply is **one embed** arranged to read like a two-row grid:
+
+- **Top row, left:** the player's Roblox avatar as the embed thumbnail. (Discord renders the thumbnail in the
+  top corner of the embed; it is the closest native equivalent to a top-left photo.)
+- **Top row, right:** a vertical information list in the embed description:
+  - rank in Empire Français,
+  - rank in Neuvième Corps,
+  - **Special assignments** — any of the member's Discord roles that match the configured special-assignment
+    list (Requirement 16), shown by their configured labels (for example "Eagle Bearer", "Regimental Drummer"),
+  - **Regiment(s)** — any of the member's Discord roles that match the configured regiment list
+    (Requirement 16); a member may hold more than one.
+- **Bottom row (spans the full width):** one small table per Stats Source the player was found in. Each table
+  is a field whose **name is the source's custom display name in bold** and whose value is a compact two-line
+  table (a header row of column labels and a single data row for that player) rendered so the columns line up.
+  Multiple matching sources appear as multiple tables stacked vertically.
 
 #### Acceptance Criteria
 
 1. WHEN a member runs `/userinfo` with a `user` and an optional `source` (autocomplete of source names) THEN
    the system SHALL look the player up in the chosen source.
-2. IF `source` is omitted THEN the system SHALL query every enabled Stats Source, at most 3 at a time, and show
-   one embed for each source that contains the player, up to 3 embeds.
-3. WHEN the stats embed is built THEN it SHALL show the Roblox username, avatar headshot, rank in each Managed
-   Group, the configured fields in the configured order, the source name in the footer, and the source's
-   accent colour.
-4. IF the player is found in no source THEN the system SHALL say which sources were searched and which names
-   were tried, and SHALL still show the group ranks.
-5. IF a Stats Endpoint is slow or failing THEN the system SHALL still show results from the other sources and
-   SHALL name the failing source.
-6. WHEN the same player and source are requested again within 60 seconds THEN the system SHALL reuse the
+2. IF `source` is omitted THEN the system SHALL query every enabled Stats Source, at most 3 at a time, and
+   include one table for each source that contains the player.
+3. WHEN the info card is built THEN it SHALL be a single embed containing the avatar thumbnail, the vertical
+   information list (EF rank, Corps rank, special assignments, regiments), and one table per matching source.
+4. WHEN a source table is rendered THEN its header row SHALL be the configured field labels in the configured
+   order and its data row SHALL be that player's values; the table SHALL be titled with the source's custom
+   display name in bold.
+5. IF the player is found in no source THEN the system SHALL still show the avatar, ranks, assignments and
+   regiments, and SHALL say which sources were searched and which names were tried.
+6. IF a Stats Endpoint is slow or failing THEN the system SHALL still show the other sources' tables and SHALL
+   name the failing source.
+7. WHEN the same player and source are requested again within 60 seconds THEN the system SHALL reuse the
    cached result, and the cache SHALL hold at most 100 entries.
-7. IF a configured field is blank in the sheet THEN the system SHALL show "—".
-8. IF the card would exceed Discord's embed limits THEN the system SHALL truncate values instead of failing.
-9. WHEN a member runs `/userinfo` THEN the system SHALL require the `configurable` access level.
+8. IF a configured field value is blank in the sheet THEN the system SHALL show "—" in that table cell.
+9. IF the card would exceed Discord's embed limits THEN the system SHALL truncate values (and, if needed, drop
+   the least-important tables) instead of failing.
+10. WHEN a member has no special assignments or is in no listed regiment THEN the system SHALL show "None" for
+    that line rather than omitting it.
+11. WHEN a member runs `/userinfo` THEN the system SHALL require the `configurable` access level.
+12. WHEN `/userinfo` replies THEN the reply SHALL be public (not ephemeral) so everyone in the channel can see
+    the card (see Requirement 2.5).
 
 ### Requirement 11: Coping with outdated usernames in sheets
 
@@ -418,3 +464,58 @@ secure, light and safe to deploy.
 4. WHEN a comment is written THEN it SHALL explain why, not repeat what the code says.
 5. WHEN a command file is written THEN it SHALL start with a short header comment stating name, arguments,
    access level, and what it does.
+
+### Requirement 16: Special-assignment and regiment role lists
+
+**User Story:** As an officer, I want the bot to know which Discord roles denote special assignments (such as
+Eagle Bearer or Regimental Drummer) and which denote regiments, so that `/userinfo` can show them and I can
+change the lists from Discord without touching the codebase.
+
+#### Acceptance Criteria
+
+1. WHEN an officer manages special assignments THEN the system SHALL provide a command to `add`, `remove`, and
+   `list` special-assignment entries, where each entry pairs a Discord role with a display label.
+2. WHEN an officer manages regiments THEN the system SHALL provide a command to `add`, `remove`, and `list`
+   regiment entries, where each entry pairs a Discord role with a display label.
+3. WHEN a label is omitted while adding THEN the system SHALL use the Discord role's current name as the label.
+4. WHEN the lists are stored THEN they SHALL live in the settings store (not the codebase) so changes apply to
+   the very next `/userinfo` without a restart.
+5. WHEN `/userinfo` builds the card THEN it SHALL show, for the target member, the labels of every configured
+   special-assignment role and every configured regiment role that the member holds.
+6. IF a member holds more than one regiment role THEN the system SHALL list all of them.
+7. WHEN a `list` subcommand runs THEN it SHALL mark any entry whose Discord role no longer exists as
+   "deleted role", and the system SHALL ignore deleted roles when building `/userinfo`.
+8. WHEN a member runs these role-list commands THEN the system SHALL require the `configurable` access level.
+9. WHEN a secret would never be involved THEN these commands SHALL store only role IDs and plain labels.
+
+### Requirement 17: Command execution logging to a channel
+
+**User Story:** As an admin, I want every command a member runs to be logged to a Discord channel I choose, so
+that I have an audit trail of who did what without reading the server logs.
+
+#### Acceptance Criteria
+
+1. WHEN an admin runs `/log set` with a text channel THEN the system SHALL store that channel and apply it to
+   the very next command without a restart.
+2. WHEN an admin runs `/log show` THEN the system SHALL show the current log channel (or "not set"). There is
+   no `clear` subcommand.
+3. WHEN a member runs any command (slash command or context menu) THEN the system SHALL post one log entry to
+   the configured log channel containing the command name, the member who ran it, the channel it was run in,
+   the time, and a specific summary of what was done.
+4. WHEN a command changes something (for example `/rank` or `/accept`) THEN the log entry SHALL include the
+   target and the outcome (for example old→new rank, groups touched, Discord role change).
+5. WHEN `/eventdm` is confirmed THEN the log entry SHALL be detailed enough to trace a rule-breaking message:
+   it SHALL include the role, the recipient count, the results channel (if any), and the exact title and
+   message that were sent. (The DM title and message are officer-authored content, not secrets, and SHALL be
+   logged in full.)
+6. WHEN a log entry would include a true secret (Stats Endpoint URL or secret, Discord/Roblox tokens,
+   cookies, Bloxlink key) THEN the system SHALL omit it; all other option values SHALL appear.
+7. IF no log channel is configured THEN the system SHALL skip logging silently and SHALL NOT fail the command.
+8. IF the configured log channel has been deleted or the bot cannot post to it THEN the system SHALL skip
+   logging, log a console warning, and SHALL NOT fail the command.
+9. WHEN a member runs `/log` THEN the system SHALL require the `admin` access level, and it SHALL NOT be
+   configurable.
+10. WHEN the log entry is posted THEN it SHALL NOT create mentions or pings (it may share a channel with other
+    logging bots such as Dyno; the bot only posts and never manages the channel).
+11. WHEN command logging runs THEN it SHALL NOT block or delay the command's own reply (logging happens
+    alongside, and a logging failure never changes the command result).
