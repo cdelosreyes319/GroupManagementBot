@@ -42,6 +42,54 @@ describe("createJsonSettingsStore", () => {
     expect(reopened.get().commandRoles["rank"]).toEqual(["role-1"]);
   });
 
+  test("fills keys missing from an older settings.json with defaults", async () => {
+    // A file written before later features added eventDmBlacklist, the role
+    // lists, and logChannelId.
+    const filePath = path.join(dir, "settings.json");
+    const oldFile = {
+      version: 1,
+      commandRoles: { rank: ["role-1"] },
+      eventDmExcludedRoleIds: ["role-2"],
+      statsSources: [],
+      usernameAliases: {},
+    };
+    await fs.writeFile(filePath, JSON.stringify(oldFile), "utf8");
+
+    const store = await createJsonSettingsStore(filePath);
+    const settings = store.get();
+    expect(settings.eventDmBlacklist).toEqual([]);
+    expect(settings.regiments).toEqual([]);
+    expect(settings.specialAssignments).toEqual([]);
+    expect(settings.imperialHonours).toEqual([]);
+    expect(settings.logChannelId).toBeNull();
+    // Existing values are kept as they were.
+    expect(settings.commandRoles).toEqual({ rank: ["role-1"] });
+    expect(settings.eventDmExcludedRoleIds).toEqual(["role-2"]);
+  });
+
+  test("does not rewrite an older file just by loading it", async () => {
+    const filePath = path.join(dir, "settings.json");
+    const original = JSON.stringify({ version: 1, commandRoles: {} });
+    await fs.writeFile(filePath, original, "utf8");
+
+    await createJsonSettingsStore(filePath);
+    expect(await fs.readFile(filePath, "utf8")).toBe(original);
+  });
+
+  test("saves the filled-in keys on the next update", async () => {
+    const filePath = path.join(dir, "settings.json");
+    await fs.writeFile(filePath, JSON.stringify({ version: 1, commandRoles: {} }), "utf8");
+
+    const store = await createJsonSettingsStore(filePath);
+    await store.update((draft) => {
+      draft.eventDmBlacklist.push("user-1");
+    });
+
+    const saved = JSON.parse(await fs.readFile(filePath, "utf8"));
+    expect(saved.eventDmBlacklist).toEqual(["user-1"]);
+    expect(saved.logChannelId).toBeNull();
+  });
+
   test("refuses to start on a corrupt file without overwriting it", async () => {
     const filePath = path.join(dir, "settings.json");
     await fs.writeFile(filePath, "not json", "utf8");
