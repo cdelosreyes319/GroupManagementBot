@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm run typecheck)",
+      "Bash(npm run build)",
+      "Bash(npx vitest run:*)",
+      "Bash(npx tsc --noEmit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)"
+    ],
+    "ask": [
+      "Bash(npm run dev:*)",
+      "Bash(npm run deploy-commands:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(git push:*)",
+      "Edit(./.github/workflows/**)",
+      "Edit(./.kiro/**)",
+      "Edit(./package.json)"
+    ],
+    "deny": [
+      "Read(./.env.keys)",
+      "Edit(./.env.keys)",
+      "Edit(./.env.ci)",
+      "Bash(cat .env.keys:*)",
+      "Bash(npx dotenvx decrypt:*)",
+      "Bash(dotenvx decrypt:*)",
+      "Bash(npx dotenvx get:*)",
+      "Bash(dotenvx get:*)"
+    ]
+  }
+}
