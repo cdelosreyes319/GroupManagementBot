@@ -93,6 +93,13 @@ export function defaultSettings(): Settings {
   };
 }
 
+// Fills top-level keys missing from a loaded settings.json with their defaults.
+// The file on the server may predate fields added later (for example
+// eventDmBlacklist), and code reads those fields without checking for them.
+export function withSettingsDefaults(loaded: Partial<Settings>): Settings {
+  return { ...defaultSettings(), ...loaded };
+}
+
 // Safe default events file.
 export function defaultEventFile(): EventFile {
   return { version: 1, events: [] };

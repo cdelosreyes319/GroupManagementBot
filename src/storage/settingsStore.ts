@@ -3,7 +3,7 @@
 // directly, and so the storage could later be swapped for a database.
 import { createJsonFileStore } from "./jsonFile";
 import { dataFilePath } from "./paths";
-import { defaultSettings, type Settings } from "./types";
+import { defaultSettings, withSettingsDefaults, type Settings } from "./types";
 
 // The read/update surface the rest of the code uses for settings.
 export interface SettingsStore {
@@ -12,13 +12,15 @@ export interface SettingsStore {
 }
 
 // Creates a JSON-backed settings store. settings.json is written owner-only and
-// refuses to start if it cannot be parsed (it holds endpoint secrets).
+// refuses to start if it cannot be parsed (it holds endpoint secrets). Keys
+// missing from an older file are filled with defaults on load.
 export async function createJsonSettingsStore(
   filePath: string = dataFilePath("settings.json"),
 ): Promise<SettingsStore> {
   const store = await createJsonFileStore<Settings>({
     filePath,
     defaults: defaultSettings,
+    normalise: withSettingsDefaults,
     onCorrupt: "refuse",
     restrictPermissions: true,
   });

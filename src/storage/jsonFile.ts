@@ -20,6 +20,9 @@ export type JsonFileOptions<T> = {
   onCorrupt: CorruptPolicy;
   // Restrict the file to owner-only (0o600) where the OS supports it.
   restrictPermissions?: boolean;
+  // Adjusts a freshly parsed file before use, e.g. to fill keys that an older
+  // version of the file does not have yet. The file itself is not rewritten.
+  normalise?: (parsed: T) => T;
 };
 
 // A loaded JSON file with in-memory reads and atomic, queued writes.
@@ -71,8 +74,9 @@ async function loadOrCreate<T>(options: JsonFileOptions<T>): Promise<T> {
     throw error;
   }
 
+  let parsed: T;
   try {
-    return JSON.parse(raw) as T;
+    parsed = JSON.parse(raw) as T;
   } catch {
     if (options.onCorrupt === "refuse") {
       throw new Error(
@@ -85,6 +89,7 @@ async function loadOrCreate<T>(options: JsonFileOptions<T>): Promise<T> {
     await atomicSave(options, defaults);
     return defaults;
   }
+  return options.normalise ? options.normalise(parsed) : parsed;
 }
 
 // Writes to <file>.tmp, copies the current file to <file>.bak, then renames tmp
