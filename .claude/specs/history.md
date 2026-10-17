@@ -6,6 +6,7 @@ One line per closed feature spec, newest first. Detail lives in git history and 
 
 | Date | Feature slug | Requirements | Summary |
 |------|--------------|--------------|---------|
+| 2026-10-17 | _fix/eventdm/broadcast-reliability_ | R4.2, R4.8, R4.11–4.19, R5.5–5.6, R5.10–5.13, R17.5 | `/eventdm` reliability: member-fetch rate limits explained (B-10), real names (B-11), >15 min sends (B-12), officer display name (B-13), one send per Confirm (B-15/16), answers kept during sends (B-17), bot member never evicted (B-18), Embed Links check (B-19), closed polls pruned first (B-20), expired previews (B-21), accurate counts after restart (B-22); handler split (B-3). |
 | 2026-10-02 | _fix/settings/missing-keys_ | R13.4 | Fill top-level keys missing from an older `settings.json` with defaults on load (B-0). |
 | 2026-10-02 | _migration_ | — | Moved specs from `.kiro/` to `.claude/specs/` as living docs; audited drift into `backlog.md`. |
 

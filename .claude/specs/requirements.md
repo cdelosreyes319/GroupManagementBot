@@ -189,6 +189,8 @@ mass-DMing by accident.
 7. WHEN anyone other than the officer who created the preview presses a button THEN the system SHALL ignore
    the press and tell them privately that the prompt is not theirs.
 8. WHEN a preview has been open for 5 minutes THEN the system SHALL expire it and disable its buttons.
+   **(as built:** the bounded-memory rule allows no per-preview timer, so the buttons are removed on the first
+   press after expiry, which replaces the preview with an "expired" notice.**)**
 9. WHEN Confirm is pressed THEN the system SHALL send the DMs one at a time with a short pause between each,
    SHALL update a progress message at intervals, and SHALL NOT block other commands while sending.
 10. IF a recipient has DMs closed or sending fails THEN the system SHALL continue with the remaining
@@ -196,7 +198,9 @@ mass-DMing by accident.
 11. WHEN sending finishes THEN the system SHALL show a summary with the number sent, the number failed, and
     the display names of failed recipients (truncated to fit Discord limits).
 12. WHILE a broadcast is sending in the server THEN the system SHALL refuse to start another one, and WHEN one
-    has finished THEN the system SHALL refuse a new one for 5 minutes.
+    has finished THEN the system SHALL refuse a new one for 5 minutes. This SHALL hold for presses that arrive
+    at the same moment (a double-click on Confirm, or two officers confirming together): exactly one send
+    starts and the other press is told why.
 13. WHEN a DM is sent THEN it SHALL be an embed showing the title, the message, the sending officer's display
     name and the server name, and SHALL NOT create mentions or pings.
 14. WHEN a member runs `/eventdm` THEN the system SHALL require the `configurable` access level.
@@ -211,6 +215,13 @@ mass-DMing by accident.
 17. IF a blacklisted officer runs `/eventdm` THEN the system SHALL refuse before building any recipient list or
     sending any DM, and say they are blacklisted and should contact an administrator. Removal from the
     blacklist is manual (an administrator edits the settings file).
+18. IF Discord rate-limits or times out the member-list request when the modal is submitted THEN the system
+    SHALL tell the officer privately that the member list is unavailable and, for a rate limit, how many
+    seconds to wait before running `/eventdm` again, instead of showing the generic error. (B-10)
+19. IF a broadcast takes longer than the officer's reply can be edited (Discord allows 15 minutes) THEN the
+    system SHALL still post the log entry (Requirement 17.5) and count the broadcast toward the rate limit
+    (Requirement 4.15), SHALL warn at Confirm that the summary will arrive by DM, and SHALL send the
+    Requirement 4.11 summary to the officer by DM. (B-12)
 
 ### Requirement 5: Optional attendance poll inside the DM
 
@@ -232,14 +243,20 @@ totals in a channel I choose, so that I know who is coming without reading repli
    count who have not answered, the count whose DM failed, and up to 20 names per answer followed by
    "+N more", and SHALL edit the message at most once every 10 seconds per poll.
 6. WHEN a poll has been open for 72 hours THEN the system SHALL treat it as closed, tell any later button
-   presser that the poll is closed, and remove the buttons from their DM.
+   presser that the poll is closed, and remove the buttons from their DM. A poll no longer in storage
+   (Requirement 5.10) SHALL be treated the same way.
 7. IF a user who was not a recipient of the poll presses a button THEN the system SHALL ignore the answer.
 8. IF the summary message was deleted or the results channel is no longer reachable THEN the system SHALL log
    it, keep recording answers, and SHALL NOT crash.
 9. WHEN the bot restarts THEN previously sent poll buttons SHALL still work, because polls are stored in a file.
-10. WHEN polls are saved THEN the system SHALL keep at most 20 polls and delete polls older than 30 days.
+10. WHEN polls are saved THEN the system SHALL keep at most 20 polls and delete polls older than 30 days. When
+    over 20, closed polls SHALL be deleted before open ones.
 11. WHEN a recipient presses a poll button in a DM THEN the system SHALL accept it even though it is not in the
     server, and SHALL NOT require a command permission for it.
+12. WHEN an answer is recorded while the broadcast is still sending THEN the system SHALL keep it; finishing the
+    send SHALL NOT overwrite answers.
+13. WHEN the summary counts recipients THEN it SHALL count only members whose DM was attempted, so a restart
+    in the middle of sending does not count never-messaged members as "No answer".
 
 ### Requirement 6: Event DM exclusion list
 

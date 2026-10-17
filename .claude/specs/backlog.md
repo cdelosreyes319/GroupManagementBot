@@ -31,7 +31,8 @@ Decide whether it is worth it; otherwise retire the idea.
 
 | File | Lines | Note |
 |------|-------|------|
-| `src/interactions/eventDmInteractions.ts` | ~440 | modal, preview, confirm/send, RSVP, alert in one file |
+| ~~`src/interactions/eventDmInteractions.ts`~~ | ~~440~~ → 188 | split 2026-10-17 into `eventDmInteractions` / `eventDmMembers` / `eventDmSend` / `eventDmPoll` / `eventDmContext`, each under 200 |
+| `src/services/eventDmService.ts` | ~230 | grew with `claimSend`/`cancel`/`releaseClaim` (B-15); the per-officer rate limiter (`recordSendAndCheck`) is a clean seam to split out |
 | `src/commands/statssource.ts` | ~400 | Kiro task 13.5 said to split `field-*` into `statssourceFields.ts` past ~200 lines; not done |
 | `src/interactions/router.ts` | ~275 | |
 | `src/commands/rankuser.ts` | ~230 | also contains Discord role application (see B-4) |
@@ -74,12 +75,118 @@ TypeScript tables. Today all zh-CN strings live in `src/i18n/localizations.ts`. 
 - Fold in B-1 (limit text) and decide B-2 (choice names).
 - Tests for the loader and `applyLocalizations`; `npm run deploy-commands` after release.
 
+### B-14 · P2 · Change how poll results are shown (needs owner decisions)
+
+The owner wants to change the results embed layout. Changes R5.5, so it goes through `/spec-new`. Open
+questions:
+- Show voters as `<@id>` mentions (render the current nickname, clickable, never ping inside an embed, and
+  also fix polls stored with IDs before B-11) or as stored plain names?
+- One voter per line, or comma-separated?
+- Should "No answer" list names, or stay a count?
+- Anything else (answer time, sort order)?
+
+Keep the per-answer cap and "+N more" within the 1024-character field limit.
+
 ### B-8 · P3 · Legacy naming `DISCORD_CORPS_ID`
 
 `init.ts` still exposes the Discord server ID as `groups.DISCORD_CORPS_ID` (kept for `main.test.ts`).
 `config/constants.ts` has `DISCORD_SERVER_ID`. If B-5 removes the test, consolidate on `DISCORD_SERVER_ID`.
 
 ## Resolved
+
+### B-15 · ~~P1~~ · Double-clicking Confirm sent every DM twice
+
+_Found 2026-10-17 by a fake-Discord repro of `confirmSend`; also present on `main`._ The lock was checked, then
+the handler awaited `interaction.update` before removing the draft and taking the lock, so a second click passed
+the same check. **Resolved 2026-10-17** (`fix/eventdm/broadcast-reliability`): `eventDmService.claimSend` checks
+the draft status, lock and cooldown and takes the lock synchronously before the first `await`; drafts keep a
+`status` so the second press is told "already confirmed". Lock released by `finishSend` in a `finally`, or by
+`releaseClaim` (no cooldown) if the "Sending…" update fails before anything is sent.
+
+### B-16 · ~~P1~~ · Two officers confirming at the same moment both broadcast (R4.12)
+
+Same gap as B-15 with two different drafts. **Resolved 2026-10-17** by the same synchronous `claimSend`.
+
+### B-17 · ~~P1~~ · Poll answers given during a broadcast were erased when it finished
+
+`recordAnswer` saved a new copy of the record; the send loop then saved its copy from before sending (no
+answers) over it. **Resolved 2026-10-17**: `eventStore.update(id, change)` edits the latest saved record inside
+the write queue; `recordAnswer` and the send loop use it. New R5.12; regression tests in `eventStore.test.ts`
+and `pollService.test.ts`.
+
+### B-18 · ~~P1~~ · The bot's own member could be evicted from the member cache
+
+`GuildMemberManager: 200` had no `keepOverLimit`, so a full member fetch evicted the bot; `guild.members.me`
+then returned `null` and `/rank` reported "the bot lacks the Manage Roles permission". **Resolved 2026-10-17**:
+`keepOverLimit` keeps the bot's member; `/rank` also falls back to `members.fetchMe()`.
+
+### B-19 · ~~P2~~ · Results-channel check ignored Embed Links (R4.2)
+
+**Resolved 2026-10-17**: `/eventdm` requires View Channel, Send Messages and Embed Links in the results channel.
+
+### B-20 · ~~P2~~ · Open polls could be pruned before closing
+
+The store kept the newest 20 regardless of state; a pruned poll's buttons said "not open to you".
+**Resolved 2026-10-17**: closed polls are pruned first (R5.10); a press on a poll no longer stored is treated
+as closed (R5.6).
+
+### B-21 · ~~P3~~ · Expired preview buttons stayed clickable (R4.8)
+
+**Resolved 2026-10-17** within the no-per-entry-timer rule: the first press after expiry replaces the preview
+with an "expired" notice and removes its buttons (R4.8 as-built note).
+
+### B-22 · ~~P3~~ · A restart mid-send counted never-messaged members as "No answer"
+
+The poll stored every planned recipient up front. **Resolved 2026-10-17**: each recipient is added just before
+their DM and removed the moment their DM fails (R5.13). Costs one `events.json` write per DM (plus one per
+failure).
+
+### B-10 · ~~P1~~ · `/eventdm` modal submit shows the generic error when Discord rate-limits the member fetch
+
+_Found 2026-10-17 from an officer report (ephemeral "Something went wrong" under "used /eventdm")._
+
+`handleModal` calls `guild.members.fetch()` with no arguments (gateway opcode 8, all members). Discord
+rate-limits that request per server; discord.js 14.25 rejects with `GatewayRateLimitError` ("Request with
+opcode 8 was rate limited. Retry after N seconds."). Nothing catches it, so the router replies with
+`MESSAGES.genericError`. Any officer submitting within the window of another submission (or cancelling and
+resubmitting quickly) hits it. The same line can also reject with `GuildMembersTimeout` after 120 s.
+Confirm in pm2 logs: `Unhandled interaction error: GatewayRateLimitError: …`.
+
+Fix: catch both errors and tell the officer to wait N seconds and run `/eventdm` again. (Discord's docs confirm
+the rate limit and its `retry_after`, but not a fixed window length; the code always uses `retry_after`.)
+
+**Resolved 2026-10-17** (branch `fix/eventdm/broadcast-reliability`): `utils/memberFetchError.ts` classifies the rate-limit and timeout errors (tested); `fetchRoleMembers` in `eventDmInteractions.ts` replies with `MESSAGES.memberListRateLimited(N)` / `memberListTimeout`. New R4.18.
+
+### B-11 · ~~P1~~ · Poll results and failure lists show user IDs instead of names
+
+`handleModal` read display names from `guild.members.cache`, which is capped at 200 members
+(`GuildMemberManager` in `main.ts`). After the full fetch most recipients are no longer cached, so the name
+fell back to the raw ID. The IDs are stored in `events.json` `displayNames` and shown in the results embed
+(R5.5) and the "Failed recipients" summary (R4.11).
+
+Fix: read names from the fetched member collection. Polls already stored keep their IDs (see B-14).
+
+**Resolved 2026-10-17** (same branch): names are read from the fetched role members.
+
+### B-12 · ~~P1~~ · Broadcasts longer than 15 minutes skip the log entry and the rate limit
+
+Interaction tokens expire after 15 minutes. With a 1.2 s gap, any broadcast over ~750 recipients (cap 1000)
+outlives the token. The final `editReply` then throws, the error reply also fails silently, and the code
+after it never runs: no `/eventdm (sent)` log entry (R17.5), and no rate-limit count or blacklist
+(R4.15–4.16). That makes large sends a way around the misuse controls.
+
+Fix: count the send toward the rate limit at Confirm (as `design.md` already shows), log before replying, and
+deliver the final summary by DM to the officer when the interaction can no longer be edited.
+
+**Resolved 2026-10-17** (same branch): `eventDmSend.ts` counts the send right after Confirm, logs before replying, warns at Confirm when `sendOutlivesReply` (tested), and DMs the summary when `editReply` fails. New R4.19.
+
+### B-13 · ~~P2~~ · Event DM footer uses the officer's username, not their display name
+
+R4.13 says the DM shows "the sending officer's display name"; the preview and the sent DM used
+`interaction.user.username`. Fix: capture the officer's server display name at modal submit and use it for
+both the preview and the DMs.
+
+**Resolved 2026-10-17** (same branch): `PendingBroadcast.requesterName` holds the server display name, used by the preview and the DMs.
 
 ### B-0 · ~~P1~~ · `/eventdm` crashes on a `settings.json` written before task 26
 

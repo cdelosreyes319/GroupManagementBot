@@ -55,6 +55,12 @@ export type Settings = {
 // A recorded RSVP answer.
 export type Answer = "yes" | "maybe" | "no";
 
+// True when a value (e.g. the last part of an RSVP button's custom ID) is a
+// valid poll answer.
+export function isAnswer(value: unknown): value is Answer {
+  return value === "yes" || value === "maybe" || value === "no";
+}
+
 // A stored event/poll, in events.json.
 export type EventRecord = {
   id: string;

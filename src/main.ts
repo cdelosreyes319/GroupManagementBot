@@ -18,11 +18,9 @@ import { configure as configureUserInfoCommand } from "./commands/userinfo";
 import { configure as configureRolesCommand } from "./commands/roles";
 import { configure as configureLogCommand } from "./commands/log";
 import { configureCommandLogger } from "./services/commandLoggerInstance";
-import {
-  configureEventDmInteractions,
-  eventDmHandler,
-  editSummaryMessage,
-} from "./interactions/eventDmInteractions";
+import { configureEventDmInteractions } from "./interactions/eventDmContext";
+import { eventDmHandler } from "./interactions/eventDmInteractions";
+import { editSummaryMessage } from "./interactions/eventDmPoll";
 import {
   configureStatsSourceInteractions,
   statsSourceHandler,
@@ -49,7 +47,13 @@ const client = new Client({
     MessageManager: 0,
     ReactionManager: 0,
     PresenceManager: 0,
-    GuildMemberManager: 200,
+    GuildMemberManager: {
+      maxSize: 200,
+      // Never evict the bot's own member: guild.members.me reads it for
+      // permission checks (/rank role sync, channel checks), and a full member
+      // fetch in /eventdm would otherwise push it out.
+      keepOverLimit: (member) => member.id === member.client.user.id,
+    },
   }),
 });
 

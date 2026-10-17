@@ -32,6 +32,15 @@ function fakeStore(initial: EventRecord): EventStore & { current: EventRecord } 
     upsert: async (record) => {
       current = record;
     },
+    // Like the real store: apply the change to a copy of the latest record.
+    update: async (id, change) => {
+      if (id !== current.id) {
+        return;
+      }
+      const draft = structuredClone(current);
+      change(draft);
+      current = draft;
+    },
     get current() {
       return current;
     },
@@ -52,6 +61,19 @@ describe("recordAnswer", () => {
     expect(store.current.answers.a).toBe("yes");
     expect(await service.recordAnswer("e1", "a", "no")).toBe("recorded");
     expect(store.current.answers.a).toBe("no");
+  });
+
+  test("keeps fields another writer changed after the answer was read", async () => {
+    const store = fakeStore(makeEvent());
+    const service = createPollService({ eventStore: store, now: () => 0, onSummaryEdit: async () => {} });
+    const pending = service.recordAnswer("e1", "a", "yes");
+    // The send loop records its results while the answer is being saved.
+    await store.update("e1", (record) => {
+      record.dmFailedCount = 1;
+    });
+    await pending;
+    expect(store.current.answers.a).toBe("yes");
+    expect(store.current.dmFailedCount).toBe(1);
   });
 
   test("returns closed after the poll closes", async () => {

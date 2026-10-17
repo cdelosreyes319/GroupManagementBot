@@ -117,7 +117,10 @@ recently active members of the role, one at a time, skipping bots, the sender,
 and any member holding an excluded role.
 
 - Manage the never-DM roles with `/eventdm-exclusions add|remove|list`.
-- Supplying a `results-channel` adds **Attending / Maybe / Can't attend** buttons
+- Pressing **Confirm** twice, or two officers confirming at once, starts only one
+  send; the other press is told why.
+- Supplying a `results-channel` (the bot needs **View Channel**, **Send
+  Messages** and **Embed Links** there) adds **Attending / Maybe / Can't attend** buttons
   to each DM and posts a live tally in that channel. Polls stay open for 72
   hours and keep working after a restart.
 - **Rate limit and auto-blacklist.** Each officer may confirm at most **5
@@ -127,6 +130,14 @@ and any member holding an excluded role.
   log channel naming them — the only place the bot ever pings `@everyone`.
   Removal is manual (an admin edits `eventDmBlacklist` in `settings.json`). The
   limit and window live in `src/config/constants.ts`.
+- **Long sends.** DMs go out about 1.2 s apart, so more than ~700 recipients
+  takes over 15 minutes — longer than Discord lets the bot edit the officer's
+  reply. The bot says so at Confirm and DMs the final summary to the officer
+  instead. The log entry and the rate-limit count are unaffected.
+- **"Member list unavailable".** Discord limits how often the bot may load the
+  full member list. If previews are built too close together, the officer is
+  told how many seconds Discord asks the bot to wait before running `/eventdm`
+  again.
 
 Member activity (who to prioritise) is tracked from messages, voice joins, and
 command use. Only user IDs and timestamps are stored — never message content.
