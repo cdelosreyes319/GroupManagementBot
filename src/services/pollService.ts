@@ -93,8 +93,11 @@ export function createPollService(deps: PollServiceDeps) {
     if (!event.recipientIds.includes(userId)) {
       return "not_a_recipient";
     }
-    const updated: EventRecord = { ...event, answers: { ...event.answers, [userId]: answer } };
-    await deps.eventStore.upsert(updated);
+    // Change only this answer in the stored record, so concurrent edits to the
+    // same event (other answers, the send loop's results) are never lost.
+    await deps.eventStore.update(eventId, (record) => {
+      record.answers[userId] = answer;
+    });
     return "recorded";
   }
 

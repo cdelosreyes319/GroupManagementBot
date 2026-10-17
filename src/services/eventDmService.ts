@@ -2,8 +2,18 @@
 // Holds pending event-DM previews, enforces a per-guild sending lock and
 // 5-minute cooldown, and runs the send loop. Discord sending is injected so
 // tests can fake it; a single failure never stops the loop.
+//
+// Claiming a send (claimSend) is synchronous on purpose: the caller claims
+// before its first await, so a double-click or a second officer's Confirm that
+// arrives a moment later always sees the claim.
 import { randomUUID } from "crypto";
 import { LIMITS } from "../config/constants";
+
+// Where a draft is in its life: waiting for a button, or already used.
+export type DraftStatus = "open" | "confirmed" | "cancelled";
+
+// The answer to "may this happen?": yes, or no with a reason for the officer.
+export type Outcome = { ok: true } | { ok: false; why: string };
 
 // A draft broadcast created by /eventdm, completed by the modal, confirmed by a
 // button. Only IDs and display names are stored, never member objects.
@@ -17,9 +27,14 @@ export type PendingBroadcast = {
   resultsChannelId: string | null;
   title: string | null;
   message: string | null;
+  // The officer's server display name, captured at modal submit (R4.13).
+  requesterName: string | null;
   recipientIds: string[];
   displayNames: Record<string, string>;
   createdAt: number;
+  // Confirmed and cancelled drafts stay until they expire, so a late second
+  // button press is told what happened instead of acting twice.
+  status: DraftStatus;
 };
 
 // One send failure (recipient ID + display name).
@@ -36,6 +51,14 @@ export type OnProgress = (done: number, total: number) => void;
 
 // Per-guild sending state for the lock and cooldown.
 type GuildState = { sending: boolean; lastFinishedAt: number };
+
+// Reports whether sending to this many recipients (each DM's own time plus
+// the pause between DMs) will take longer than the officer's reply can still
+// be edited.
+export function sendOutlivesReply(recipientCount: number): boolean {
+  const estimatedMs = recipientCount * (LIMITS.eventDmDelayMs + LIMITS.eventDmEstimatedSendMs);
+  return estimatedMs > LIMITS.eventDmReplyWindowMs;
+}
 
 // Builds the event-DM service with an injectable clock and sleep function.
 export function createEventDmService(
@@ -59,7 +82,7 @@ export function createEventDmService(
 
   // Stores a new draft broadcast and returns its short ID.
   function createDraft(
-    draft: Omit<PendingBroadcast, "id" | "createdAt" | "recipientIds" | "displayNames" | "title" | "message">,
+    draft: Omit<PendingBroadcast, "id" | "createdAt" | "recipientIds" | "displayNames" | "title" | "message" | "requesterName" | "status">,
   ): string {
     pruneExpired();
     // Keep the map bounded.
@@ -78,6 +101,8 @@ export function createEventDmService(
       displayNames: {},
       title: null,
       message: null,
+      requesterName: null,
+      status: "open",
     });
     return id;
   }
@@ -86,11 +111,6 @@ export function createEventDmService(
   function get(id: string): PendingBroadcast | undefined {
     pruneExpired();
     return pending.get(id);
-  }
-
-  // Removes a pending broadcast (after confirm/cancel).
-  function remove(id: string): void {
-    pending.delete(id);
   }
 
   // Returns the guild's state, creating a default entry if needed.
@@ -103,9 +123,23 @@ export function createEventDmService(
     return state;
   }
 
-  // Checks whether a new broadcast may start in a guild (lock + cooldown).
-  function canStart(guildId: string): { ok: true } | { ok: false; why: string } {
-    const state = stateFor(guildId);
+  // Explains why a draft that is no longer open cannot be used again.
+  function alreadyUsed(draft: PendingBroadcast): Outcome {
+    if (draft.status === "confirmed") {
+      return { ok: false, why: "This broadcast was already confirmed." };
+    }
+    return { ok: false, why: "This broadcast was already cancelled." };
+  }
+
+  // Claims the guild's sending lock for a draft and marks it confirmed, or
+  // explains why not (draft already used, a send in progress, or cooldown).
+  // Every successful claim must be paired with finishSend (after sending) or
+  // releaseClaim (if nothing was sent).
+  function claimSend(draft: PendingBroadcast): Outcome {
+    if (draft.status !== "open") {
+      return alreadyUsed(draft);
+    }
+    const state = stateFor(draft.guildId);
     if (state.sending) {
       return { ok: false, why: "A broadcast is already sending in this server." };
     }
@@ -114,41 +148,58 @@ export function createEventDmService(
       const waitMs = LIMITS.eventDmCooldownMs - sinceFinished;
       return { ok: false, why: `Please wait ${Math.ceil(waitMs / 1000)}s before the next broadcast.` };
     }
+    state.sending = true;
+    draft.status = "confirmed";
+    return { ok: true };
+  }
+
+  // Releases the guild's sending lock without a cooldown, for a claim that
+  // failed before any DM was sent.
+  function releaseClaim(guildId: string): void {
+    stateFor(guildId).sending = false;
+  }
+
+  // Releases the guild's sending lock and starts the cooldown.
+  function finishSend(guildId: string): void {
+    const state = stateFor(guildId);
+    state.sending = false;
+    state.lastFinishedAt = now();
+  }
+
+  // Marks an open draft cancelled, or explains why it is no longer open.
+  function cancel(draft: PendingBroadcast): Outcome {
+    if (draft.status !== "open") {
+      return alreadyUsed(draft);
+    }
+    draft.status = "cancelled";
     return { ok: true };
   }
 
   // Runs the send loop: sends to each recipient with a pause, updates progress
-  // at intervals, continues past failures, and returns the send result.
+  // at intervals, continues past failures, and returns the send result. The
+  // caller holds the lock (claimSend) and releases it (finishSend).
   async function startSend(
     broadcast: PendingBroadcast,
     sendOne: SendOne,
     onProgress: OnProgress,
   ): Promise<SendResult> {
-    const state = stateFor(broadcast.guildId);
-    state.sending = true;
-
     const result: SendResult = { sent: 0, failed: [] };
     const total = broadcast.recipientIds.length;
-    try {
-      for (let i = 0; i < broadcast.recipientIds.length; i++) {
-        const recipientId = broadcast.recipientIds[i];
-        try {
-          await sendOne(recipientId);
-          result.sent++;
-        } catch {
-          result.failed.push({ id: recipientId, name: broadcast.displayNames[recipientId] ?? recipientId });
-        }
-        const done = i + 1;
-        if (done % LIMITS.eventDmProgressEvery === 0 || done === total) {
-          onProgress(done, total);
-        }
-        if (done < total) {
-          await sleepFn(LIMITS.eventDmDelayMs);
-        }
+    for (let i = 0; i < total; i++) {
+      const recipientId = broadcast.recipientIds[i];
+      try {
+        await sendOne(recipientId);
+        result.sent++;
+      } catch {
+        result.failed.push({ id: recipientId, name: broadcast.displayNames[recipientId] ?? recipientId });
       }
-    } finally {
-      state.sending = false;
-      state.lastFinishedAt = now();
+      const done = i + 1;
+      if (done % LIMITS.eventDmProgressEvery === 0 || done === total) {
+        onProgress(done, total);
+      }
+      if (done < total) {
+        await sleepFn(LIMITS.eventDmDelayMs);
+      }
     }
     return result;
   }
@@ -170,7 +221,7 @@ export function createEventDmService(
     return { overLimit: recent.length > LIMITS.eventDmMaxPerDay, count: recent.length };
   }
 
-  return { createDraft, get, remove, canStart, startSend, recordSendAndCheck };
+  return { createDraft, get, claimSend, releaseClaim, finishSend, cancel, startSend, recordSendAndCheck };
 }
 
 export type EventDmService = ReturnType<typeof createEventDmService>;

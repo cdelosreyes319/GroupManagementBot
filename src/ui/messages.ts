@@ -10,4 +10,9 @@ export const MESSAGES = {
   noPermission: "You do not have permission to use this command.",
   serverOnly: "This command can only be used inside the server.",
   genericError: "Something went wrong. Please try again later.",
+  memberListRateLimited: (seconds: number): string =>
+    `Discord is limiting how often I can load the member list. Please wait ${seconds}s and run /eventdm again.`,
+  memberListTimeout: "Loading the member list took too long. Please run /eventdm again.",
+  eventDmLongSend:
+    "This send will take longer than 15 minutes, so the final summary will be sent to you by DM.",
 } as const;
