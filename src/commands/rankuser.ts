@@ -97,8 +97,9 @@ async function syncDiscordRankRole(
     return { status: "unchanged" };
   }
 
-  // Check the bot can manage roles before attempting the edit.
-  const me = member.guild.members.me;
+  // Check the bot can manage roles before attempting the edit. Fetch the bot's
+  // own member if it is not cached, rather than misreporting a permission gap.
+  const me = member.guild.members.me ?? (await member.guild.members.fetchMe().catch(() => null));
   if (!me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
     return { status: "failed", reason: "the bot lacks the Manage Roles permission" };
   }

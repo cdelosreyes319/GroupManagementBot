@@ -49,7 +49,11 @@ src/
 ├─ interactions/
 │  ├─ router.ts                   # sole interactionCreate handler
 │  ├─ customId.ts                 # build/parse "feature:action:id[:extra]" (≤100 chars)
-│  ├─ eventDmInteractions.ts      # eventdm modal, Confirm/Cancel, send loop, RSVP buttons, rate-limit alert
+│  ├─ eventDmContext.ts           # shared deps for the eventdm files: configureEventDmInteractions / getEventDmDeps
+│  ├─ eventDmInteractions.ts      # "eventdm" handler: modal submit (preview), button routing
+│  ├─ eventDmMembers.ts           # role member fetch (rate limit / timeout reply), officer display name
+│  ├─ eventDmSend.ts              # Confirm: rate-limit count + alert, send loop, log entry, summary (DM fallback)
+│  ├─ eventDmPoll.ts              # RSVP buttons, poll summary embed post/edit, RSVP press handler
 │  └─ statsSourceInteractions.ts  # statssource modal (endpoint URL + secret)
 ├─ api/                           # thin wrappers over the outside world; easy to fake
 │  ├─ bloxlink.ts                 # Discord ID -> Roblox ID (typed failure reasons)
@@ -82,7 +86,7 @@ src/
 │  ├─ jsonFile.ts                 # load once, atomic save, .bak, write queue, corrupt-file policy
 │  ├─ paths.ts                    # getDataDir() (DATA_DIR or <cwd>/data), dataFilePath()
 │  ├─ settingsStore.ts            # SettingsStore { get, update }
-│  ├─ eventStore.ts               # polls (≤20 records, ≤30 days)
+│  ├─ eventStore.ts               # polls (≤20 records, closed pruned first, ≤30 days); update(id, change)
 │  └─ types.ts                    # Settings, StatsSource, StatField, RoleLabel, EventRecord, ActivityFile + defaults
 ├─ ui/
 │  ├─ embeds.ts                   # success/warn/error, poll summary, event DM, Roblox info, user info card
@@ -312,10 +316,12 @@ sequenceDiagram
   B->>B: blacklisted? -> refuse
   B-->>O: modal (title ≤100, message ≤1500)
   O->>B: submit
-  B->>B: fetch members once, selectRecipients, store pending (IDs + names, 5 min)
+  B->>B: fetch members once (rate limit / timeout -> "wait N s", R4.18)
+  B->>B: selectRecipients, store pending (IDs + names from the fetch, officer display name, 5 min)
   B-->>O: ephemeral preview + Confirm/Cancel
   O->>B: Confirm (requester only)
-  B->>B: lock + cooldown, remove preview buttons
+  B->>B: claimSend (sync: draft open? lock + cooldown)
+  B-->>O: "Sending…" replaces preview (fails -> releaseClaim, no cooldown)
   B->>B: recordSendAndCheck(officer)
   alt over rate limit
     B->>B: add to settings.eventDmBlacklist
@@ -325,10 +331,20 @@ sequenceDiagram
     B->>CH: summary embed, save EventRecord
   end
   loop each recipient
+    opt poll
+      B->>B: add recipient to EventRecord (in place)
+    end
     B->>M: DM embed (+ RSVP buttons), 1.2 s gap
+    opt poll and DM failed
+      B->>B: remove recipient, dmFailedCount++ (in place)
+    end
   end
-  B-->>O: summary (sent / failed names)
+  opt poll
+    B->>B: requestSummaryEdit (debounced, R5.5)
+  end
   B->>L: log entry with role, count, results channel, full title + message
+  B-->>O: summary (sent / failed names); by DM if the reply expired (>15 min, R4.19)
+  B->>B: finishSend (always, in finally): unlock + start cooldown
   M->>B: RSVP (in DM)
   B->>B: recordAnswer, update DM, debounced summary edit (≤1 per 10 s)
 ```
@@ -336,7 +352,20 @@ sequenceDiagram
 - `selectRecipients`: drop bots + sender → drop excluded-role holders (counted) → sort by last active desc, then
   `joinedAt` desc, then ID → take `limit`. Exclusions never consume capacity.
 - `createEventDmService`: pending map (≤20, lazy expiry), per-guild `{ sending, lastFinishedAt }`,
-  `startSend(pending, sendOne, onProgress, sleepFn)`, `recordSendAndCheck(userId) → { overLimit, count }`.
+  `claimSend(draft)` / `cancel(draft)` → `{ ok } | { ok: false, why }` (the `why` is officer-facing text),
+  `finishSend(guildId)` (unlock + cooldown), `releaseClaim(guildId)` (unlock only, nothing was sent),
+  `startSend(pending, sendOne, onProgress)`, `recordSendAndCheck(userId) → { overLimit, count }`.
+  Drafts carry `status: open | confirmed | cancelled` and stay until expiry, so a second press is refused with a
+  reason. `claimSend` is synchronous and must run before the handler's first `await` (R4.12); the caller pairs
+  it with `releaseClaim` if the "Sending…" update fails, otherwise with `finishSend` in a `finally`.
+- `sendOutlivesReply(n)` estimates `n × (eventDmDelayMs + eventDmEstimatedSendMs)` against
+  `eventDmReplyWindowMs` (14 min) to decide the R4.19 warning. The DM fallback for the summary does not depend
+  on the estimate.
+- Poll records are only ever changed with `eventStore.update(id, change)`, which applies the change to the
+  latest saved copy inside the file's write queue. Never `upsert` a copy read earlier: an RSVP and the send loop
+  write the same record concurrently (R5.12). Adding each recipient before their DM costs one `events.json`
+  write per DM (1.2 s apart) plus one per failed DM, accepted so a restart mid-send leaves accurate counts
+  (R5.13).
 - `createPollService`: `recordAnswer → recorded | closed | not_a_recipient | unknown_event`, `buildSummary`,
   `requestSummaryEdit` (one `unref()`'d timer per active poll — the only timer in the bot).
 - Custom IDs: `eventdm:modal:<id>`, `eventdm:confirm:<id>`, `eventdm:cancel:<id>`,
@@ -474,10 +503,14 @@ readers must tolerate their absence. Bump `version` only for breaking reshapes, 
 new Client({
   intents: [Guilds, GuildMembers, GuildMessages, GuildVoiceStates],
   makeCache: Options.cacheWithLimits({
-    MessageManager: 0, ReactionManager: 0, PresenceManager: 0, GuildMemberManager: 200,
+    MessageManager: 0, ReactionManager: 0, PresenceManager: 0,
+    GuildMemberManager: { maxSize: 200, keepOverLimit: (m) => m.id === m.client.user.id },
   }),
 });
 ```
+
+The bot's own member is kept over the limit because `guild.members.me` reads it for permission checks; without
+that, the full member fetch in `/eventdm` evicts it and `/rank` misreports a missing Manage Roles permission.
 
 DM button presses arrive as normal interactions, so `DirectMessages` is not needed.
 
@@ -508,7 +541,7 @@ DM button presses arrive as normal interactions, so `DirectMessages` is not need
 - Pure modules import `config/constants.ts`, never `init.ts`.
 - Use fake timers for debounce/expiry; an injected clock for activity and rate limits; a temp dir for
   `jsonFile`.
-- Command files and Discord glue (`eventDmInteractions.ts`, `rankuser.ts` role application) are not unit-tested;
+- Command files and Discord glue (`eventDm*.ts` interactions, `rankuser.ts` role application) are not unit-tested;
   keep logic out of them so the untested surface stays thin.
 
 ---

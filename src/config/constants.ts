@@ -50,6 +50,15 @@ export const LIMITS = {
   // window. Exceeding it auto-blacklists the user from /eventdm.
   eventDmMaxPerDay: 5,
   eventDmRateWindowMs: 24 * 60 * 60_000,
+  // Discord interaction tokens expire after 15 minutes; after that the
+  // officer's ephemeral reply can no longer be edited. One minute of margin.
+  eventDmReplyWindowMs: 14 * 60_000,
+  // Rough time one DM takes (user fetch + send round trips), on top of the
+  // pause. Only used to warn the officer that a send will be long.
+  eventDmEstimatedSendMs: 300,
+  // Wait suggested if Discord rate-limits the member-list fetch without a
+  // retry_after (it normally sends one, and that value is used instead).
+  memberFetchRetryFallbackSeconds: 30,
 
   pollOpenMs: 72 * 60 * 60_000,
   pollSummaryEditGapMs: 10_000,

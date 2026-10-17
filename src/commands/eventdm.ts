@@ -56,10 +56,22 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       });
       return;
     }
-    const me = interaction.guild?.members.me;
-    if (me && !channel.permissionsFor(me).has(PermissionFlagsBits.SendMessages)) {
+    // Fetch the bot's own member if it is not cached, so the check is never skipped.
+    const me = interaction.guild?.members.me ?? (await interaction.guild?.members.fetchMe().catch(() => null));
+    // The poll summary is an embed, so the bot must see the channel, send, and embed (R4.2).
+    const needed = [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.EmbedLinks,
+    ];
+    if (me && !channel.permissionsFor(me).has(needed)) {
       await interaction.reply({
-        embeds: [warnEmbed("Invalid channel", "I cannot send messages in that results channel.")],
+        embeds: [
+          warnEmbed(
+            "Invalid channel",
+            "I need View Channel, Send Messages and Embed Links in that results channel.",
+          ),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
